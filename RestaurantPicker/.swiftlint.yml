@@ -1,0 +1,22 @@
+disabled_rules:
+  - trailing_whitespace
+  - todo
+
+opt_in_rules:
+  - empty_count
+  - closure_spacing
+  - force_unwrapping
+
+line_length: 120
+
+identifier_name:
+  min_length: 2
+  excluded:
+    - id
+    - x
+    - y
+
+excluded:
+  - DerivedData
+  - .build
+
