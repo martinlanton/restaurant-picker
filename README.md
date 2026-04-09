@@ -1,82 +1,129 @@
-# Take-Out Decidator
+# Restaurant Picker 🍽️
 
-A simple command-line tool to randomly choose restaurants based on cuisine preferences.
+An iOS app that helps you decide where to eat by randomly selecting from nearby restaurants. Built with SwiftUI and Apple MapKit.
 
-## Description
+## Features
 
-Can't decide where to order take-out from? This tool helps you make a decision by randomly selecting from your list of restaurants based on:
-- **Weighted selection**: Favor certain restaurants by adjusting their weights
-- **Include filters**: Only consider restaurants with specific cuisine tags
-- **Exclude filters**: Avoid restaurants with certain cuisine tags
+- **Discover nearby restaurants** using Apple Maps data
+- **Filter by distance** — 500m, 1km, 2km, 5km, 10km, or show all
+- **Random selection** — tap "Pick a Restaurant!" and let the app decide for you
+- **Restaurant details** — see the category, distance, phone number, and website
+- **Call or navigate** — call the restaurant directly or open directions in Apple Maps
+- **Multi-cuisine search** — searches 36 cuisine types in parallel to find more restaurants than a single MapKit query returns
 
-## Installation
+## Screenshots
 
-Install the package using:
+<!-- Add screenshots here -->
+
+## Requirements
+
+- iOS 17.0+
+- Xcode 16.0+
+- Swift 5.9+
+
+## Getting Started
+
+### 1. Clone the repository
+
 ```bash
-python setup.py install
+git clone https://github.com/YOUR_USERNAME/restaurant-picker.git
+cd restaurant-picker
 ```
 
-Or for development:
+### 2. Generate the Xcode project
+
+This project uses [XcodeGen](https://github.com/yonaskolb/XcodeGen) to generate the `.xcodeproj` from `project.yml`.
+
 ```bash
-pip install -e .
+brew install xcodegen
+xcodegen generate
 ```
 
-## Usage
+### 3. Open in Xcode
 
-### Basic Usage
-
-Run the decision tool:
 ```bash
-python -m restaurant_picker.run
+open RestaurantPicker.xcodeproj
 ```
 
-### In Your Code
+### 4. Configure signing
 
-```python
-from restaurant_picker.decide import decide
-from restaurant_picker.restaurants import restaurants
+In Xcode, select the **RestaurantPicker** target → **Signing & Capabilities** → set your **Development Team**.
 
-# Random selection from all restaurants
-result = decide(restaurants)
-print(f"You should order from: {result}")
+### 5. Build and run
 
-# Only include specific cuisines
-result = decide(restaurants, include=["asian"])
-print(f"Asian restaurant: {result}")
+Select your device or simulator and press **⌘R**.
 
-# Exclude certain cuisines
-result = decide(restaurants, exclude=["meat", "chain"])
-print(f"Non-meat, non-chain: {result}")
+> **Note**: The app requires location permissions to find nearby restaurants. When running on a simulator, you can set a simulated location via **Features → Location** in the Simulator menu.
+
+## Architecture
+
+The project follows the **MVVM** (Model-View-ViewModel) pattern:
+
+```
+RestaurantPicker/
+├── App/
+│   ├── RestaurantPickerApp.swift    # App entry point
+│   └── ContentView.swift            # Main view composition
+├── Models/
+│   └── Restaurant.swift             # Restaurant data model
+├── ViewModels/
+│   └── RestaurantViewModel.swift    # Business logic & state
+├── Views/
+│   ├── RestaurantListView.swift     # Scrollable restaurant list
+│   ├── RestaurantRowView.swift      # Single restaurant row
+│   ├── SelectedRestaurantView.swift # Selection result sheet
+│   ├── DistanceFilterView.swift     # Distance filter control
+│   └── DecideButtonView.swift       # Random pick button
+├── Services/
+│   ├── LocationManager.swift        # CoreLocation wrapper
+│   └── RestaurantSearchService.swift # MapKit search (parallel queries)
+└── Utilities/
+    └── Extensions.swift             # Helper extensions
 ```
 
-### Adding Restaurants
+### Data Flow
 
-Edit `src/take_out_decidator/restaurants.py` to add your favorite restaurants:
-
-```python
-restaurants = [
-    {"name": "your restaurant", "weight": 100, "tags": ["cuisine", "tag"]},
-    # ... more restaurants
-]
-```
-
-**Restaurant Structure**:
-- `name`: Restaurant name (string)
-- `weight`: Selection weight (higher = more likely to be chosen)
-- `tags`: List of cuisine/category tags for filtering
+1. **ContentView** creates a `RestaurantViewModel` as a `@StateObject`
+2. On appear, the ViewModel requests location permission and fetches restaurants
+3. `RestaurantSearchService` runs 36 cuisine-specific `MKLocalSearch` queries in parallel
+4. Results are deduplicated and sorted by distance
+5. The user filters by distance and taps "Pick a Restaurant!" to get a random selection
 
 ## Running Tests
 
-Run all tests:
+### In Xcode
+
+Press **⌘U** to run all tests.
+
+### From the command line
+
 ```bash
-pytest
+xcodebuild test \
+  -scheme RestaurantPicker \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-Run tests with coverage:
+## Code Quality
+
+### SwiftFormat
+
 ```bash
-pytest --cov=restaurant_picker
+brew install swiftformat
+swiftformat .
 ```
+
+### SwiftLint
+
+```bash
+brew install swiftlint
+swiftlint
+```
+
+## Known Limitations
+
+- **Apple MapKit returns ~25 results per query**. The app mitigates this by running parallel cuisine-specific searches, but coverage depends on Apple Maps data for your area.
+- **Restaurant categories** are derived from the search query that found them (e.g., "Thai", "Italian") since MapKit's `pointOfInterestCategory` returns generic values.
 
 ## License
 
-See LICENSE file for details.
+See [LICENSE](LICENSE) for details.
