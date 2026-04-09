@@ -1,0 +1,581 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		038F262C08AF2B38BE610F03 /* RestaurantListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7E4BB5A468088F806CA87D7 /* RestaurantListView.swift */; };
+		1A3DD906720088095880BA07 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CDED6F440834894CF61D912 /* ContentView.swift */; };
+		3C3257E23177BAE8DBD2A6DD /* SelectedRestaurantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217B439E9E3B6932B4099F37 /* SelectedRestaurantView.swift */; };
+		40794AFB53477348512269D7 /* Restaurant.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8442B821FF7D8E36577A710 /* Restaurant.swift */; };
+		59AAA083C39834545139DE8D /* DecideButtonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB01E38D859DCF8EF144B2F1 /* DecideButtonView.swift */; };
+		6DA5C96B439C4AA40242CDB7 /* RestaurantViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1172838D8B26405ABAEBAE65 /* RestaurantViewModel.swift */; };
+		7E6F3DE1A6DE3C914EE1C8D4 /* RestaurantViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38F01EE6FE35860665B9B96 /* RestaurantViewModelTests.swift */; };
+		7E8EFB076438772CC6DF93A5 /* RestaurantSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62AC549D47524E9C95C1EF9 /* RestaurantSearchService.swift */; };
+		7EC76E57EC7249E407A4B219 /* RestaurantRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65A54370EA04D622BA47A635 /* RestaurantRowView.swift */; };
+		93E98F355EBD296DE9F0BF34 /* RestaurantPickerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4498691F83877FECC94FC879 /* RestaurantPickerApp.swift */; };
+		BFE5DD45333969863BC38FE6 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36FCA51531FACB56DB0B9346 /* LocationManager.swift */; };
+		D89498D937B323026B533005 /* RestaurantPickerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED30A9904166725840EFBCFE /* RestaurantPickerUITests.swift */; };
+		DA0023A0C768685BFFA306FE /* DistanceFilterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04848EA3295282F2E5799B97 /* DistanceFilterView.swift */; };
+		F0E203BED520955F16917BC3 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A200CD3D8E7E955089932C7 /* Extensions.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		2A983D284145B94183147F46 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F21ECFFCF36C9BAAB1E06386 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 44C605C85FED3C70F4417710;
+			remoteInfo = RestaurantPicker;
+		};
+		9201AC6099564F8ED129D3D8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F21ECFFCF36C9BAAB1E06386 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 44C605C85FED3C70F4417710;
+			remoteInfo = RestaurantPicker;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		04848EA3295282F2E5799B97 /* DistanceFilterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceFilterView.swift; sourceTree = "<group>"; };
+		1172838D8B26405ABAEBAE65 /* RestaurantViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantViewModel.swift; sourceTree = "<group>"; };
+		217B439E9E3B6932B4099F37 /* SelectedRestaurantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedRestaurantView.swift; sourceTree = "<group>"; };
+		36FCA51531FACB56DB0B9346 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
+		4498691F83877FECC94FC879 /* RestaurantPickerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantPickerApp.swift; sourceTree = "<group>"; };
+		4A200CD3D8E7E955089932C7 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
+		4D1B40C080771B580DFB4E2B /* RestaurantPickerUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = RestaurantPickerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		65A54370EA04D622BA47A635 /* RestaurantRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantRowView.swift; sourceTree = "<group>"; };
+		9CDED6F440834894CF61D912 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		C8442B821FF7D8E36577A710 /* Restaurant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Restaurant.swift; sourceTree = "<group>"; };
+		CB01E38D859DCF8EF144B2F1 /* DecideButtonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecideButtonView.swift; sourceTree = "<group>"; };
+		DE34FE57434FAEF35C8F3F72 /* RestaurantPicker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RestaurantPicker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E7E4BB5A468088F806CA87D7 /* RestaurantListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantListView.swift; sourceTree = "<group>"; };
+		ED30A9904166725840EFBCFE /* RestaurantPickerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantPickerUITests.swift; sourceTree = "<group>"; };
+		F38F01EE6FE35860665B9B96 /* RestaurantViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantViewModelTests.swift; sourceTree = "<group>"; };
+		F62AC549D47524E9C95C1EF9 /* RestaurantSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantSearchService.swift; sourceTree = "<group>"; };
+		F97B130C25902928BBDDD063 /* RestaurantPickerTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = RestaurantPickerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		2BCE55030EF8149A51899545 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				DE34FE57434FAEF35C8F3F72 /* RestaurantPicker.app */,
+				F97B130C25902928BBDDD063 /* RestaurantPickerTests.xctest */,
+				4D1B40C080771B580DFB4E2B /* RestaurantPickerUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		357AFB7C8A4C32D59A086E69 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				CB01E38D859DCF8EF144B2F1 /* DecideButtonView.swift */,
+				04848EA3295282F2E5799B97 /* DistanceFilterView.swift */,
+				E7E4BB5A468088F806CA87D7 /* RestaurantListView.swift */,
+				65A54370EA04D622BA47A635 /* RestaurantRowView.swift */,
+				217B439E9E3B6932B4099F37 /* SelectedRestaurantView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		530A10E3B19288DC2B4CF9C5 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				1172838D8B26405ABAEBAE65 /* RestaurantViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		77C44DE19E5C971206F6C543 /* RestaurantPicker */ = {
+			isa = PBXGroup;
+			children = (
+				BE7F3EB03C05DAF34FEA2783 /* App */,
+				F1B23562482898A585125BD1 /* Models */,
+				E1A38BFAF705D817AFC775FB /* Services */,
+				C187FAC7819F653703E319A5 /* Utilities */,
+				530A10E3B19288DC2B4CF9C5 /* ViewModels */,
+				357AFB7C8A4C32D59A086E69 /* Views */,
+			);
+			path = RestaurantPicker;
+			sourceTree = "<group>";
+		};
+		BE7F3EB03C05DAF34FEA2783 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				9CDED6F440834894CF61D912 /* ContentView.swift */,
+				4498691F83877FECC94FC879 /* RestaurantPickerApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		C187FAC7819F653703E319A5 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				4A200CD3D8E7E955089932C7 /* Extensions.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		C6F65B53D414C9F2DD1713A7 /* RestaurantPickerTests */ = {
+			isa = PBXGroup;
+			children = (
+				F38F01EE6FE35860665B9B96 /* RestaurantViewModelTests.swift */,
+			);
+			path = RestaurantPickerTests;
+			sourceTree = "<group>";
+		};
+		E1A38BFAF705D817AFC775FB /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				36FCA51531FACB56DB0B9346 /* LocationManager.swift */,
+				F62AC549D47524E9C95C1EF9 /* RestaurantSearchService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		EB0D20FDBBC72FDA65731770 /* RestaurantPickerUITests */ = {
+			isa = PBXGroup;
+			children = (
+				ED30A9904166725840EFBCFE /* RestaurantPickerUITests.swift */,
+			);
+			path = RestaurantPickerUITests;
+			sourceTree = "<group>";
+		};
+		ED13D23950732A4F6CA65143 = {
+			isa = PBXGroup;
+			children = (
+				77C44DE19E5C971206F6C543 /* RestaurantPicker */,
+				C6F65B53D414C9F2DD1713A7 /* RestaurantPickerTests */,
+				EB0D20FDBBC72FDA65731770 /* RestaurantPickerUITests */,
+				2BCE55030EF8149A51899545 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		F1B23562482898A585125BD1 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				C8442B821FF7D8E36577A710 /* Restaurant.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		01A55A7339FA4703322AFF55 /* RestaurantPickerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E4CBABBE4A1BBA98ABD114B0 /* Build configuration list for PBXNativeTarget "RestaurantPickerTests" */;
+			buildPhases = (
+				B602BA35FB4BD844D15258E1 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				01A1D72EB15AD33A17691675 /* PBXTargetDependency */,
+			);
+			name = RestaurantPickerTests;
+			packageProductDependencies = (
+			);
+			productName = RestaurantPickerTests;
+			productReference = F97B130C25902928BBDDD063 /* RestaurantPickerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		44C605C85FED3C70F4417710 /* RestaurantPicker */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 96004ED227799A5686ED7829 /* Build configuration list for PBXNativeTarget "RestaurantPicker" */;
+			buildPhases = (
+				D95C2D93150653AA865F7E63 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RestaurantPicker;
+			packageProductDependencies = (
+			);
+			productName = RestaurantPicker;
+			productReference = DE34FE57434FAEF35C8F3F72 /* RestaurantPicker.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5BCF7D3911585936A1A8E4FB /* RestaurantPickerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5F67235CDB59E1A5CD9E5499 /* Build configuration list for PBXNativeTarget "RestaurantPickerUITests" */;
+			buildPhases = (
+				3BB7E3524543DF3D158565E6 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F0E240E60154EEA318245B71 /* PBXTargetDependency */,
+			);
+			name = RestaurantPickerUITests;
+			packageProductDependencies = (
+			);
+			productName = RestaurantPickerUITests;
+			productReference = 4D1B40C080771B580DFB4E2B /* RestaurantPickerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		F21ECFFCF36C9BAAB1E06386 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					01A55A7339FA4703322AFF55 = {
+						DevelopmentTeam = "";
+					};
+					5BCF7D3911585936A1A8E4FB = {
+						DevelopmentTeam = "";
+						TestTargetID = 44C605C85FED3C70F4417710;
+					};
+				};
+			};
+			buildConfigurationList = 542335E06414F558ADB1B9A8 /* Build configuration list for PBXProject "RestaurantPicker" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = ED13D23950732A4F6CA65143;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 2BCE55030EF8149A51899545 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				44C605C85FED3C70F4417710 /* RestaurantPicker */,
+				01A55A7339FA4703322AFF55 /* RestaurantPickerTests */,
+				5BCF7D3911585936A1A8E4FB /* RestaurantPickerUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		3BB7E3524543DF3D158565E6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D89498D937B323026B533005 /* RestaurantPickerUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B602BA35FB4BD844D15258E1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7E6F3DE1A6DE3C914EE1C8D4 /* RestaurantViewModelTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D95C2D93150653AA865F7E63 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1A3DD906720088095880BA07 /* ContentView.swift in Sources */,
+				59AAA083C39834545139DE8D /* DecideButtonView.swift in Sources */,
+				DA0023A0C768685BFFA306FE /* DistanceFilterView.swift in Sources */,
+				F0E203BED520955F16917BC3 /* Extensions.swift in Sources */,
+				BFE5DD45333969863BC38FE6 /* LocationManager.swift in Sources */,
+				40794AFB53477348512269D7 /* Restaurant.swift in Sources */,
+				038F262C08AF2B38BE610F03 /* RestaurantListView.swift in Sources */,
+				93E98F355EBD296DE9F0BF34 /* RestaurantPickerApp.swift in Sources */,
+				7EC76E57EC7249E407A4B219 /* RestaurantRowView.swift in Sources */,
+				7E8EFB076438772CC6DF93A5 /* RestaurantSearchService.swift in Sources */,
+				6DA5C96B439C4AA40242CDB7 /* RestaurantViewModel.swift in Sources */,
+				3C3257E23177BAE8DBD2A6DD /* SelectedRestaurantView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		01A1D72EB15AD33A17691675 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 44C605C85FED3C70F4417710 /* RestaurantPicker */;
+			targetProxy = 9201AC6099564F8ED129D3D8 /* PBXContainerItemProxy */;
+		};
+		F0E240E60154EEA318245B71 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 44C605C85FED3C70F4417710 /* RestaurantPicker */;
+			targetProxy = 2A983D284145B94183147F46 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		4C6EC4E11531D26BDB8DA146 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.restaurantpicker.RestaurantPickerTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RestaurantPicker.app/RestaurantPicker";
+			};
+			name = Debug;
+		};
+		56EF7EFC95606C863D788801 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		614DDCDD57A66B022EDCE481 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.restaurantpicker.RestaurantPickerUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = RestaurantPicker;
+			};
+			name = Debug;
+		};
+		77B5408896040B4150E42F0E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = KQYPV73342;
+				INFOPLIST_FILE = RestaurantPicker/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.restaurantpicker.RestaurantPicker;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		7D63113634C9F8DB34AD2230 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.restaurantpicker.RestaurantPickerTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RestaurantPicker.app/RestaurantPicker";
+			};
+			name = Release;
+		};
+		B5DCEE548163711A2BFED7A1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.restaurantpicker.RestaurantPickerUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = RestaurantPicker;
+			};
+			name = Release;
+		};
+		B88965A946FF84E2DEEEE717 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		EE2D3FBC4CB534C77B5C229D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = KQYPV73342;
+				INFOPLIST_FILE = RestaurantPicker/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.restaurantpicker.RestaurantPicker;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		542335E06414F558ADB1B9A8 /* Build configuration list for PBXProject "RestaurantPicker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				56EF7EFC95606C863D788801 /* Debug */,
+				B88965A946FF84E2DEEEE717 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5F67235CDB59E1A5CD9E5499 /* Build configuration list for PBXNativeTarget "RestaurantPickerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				614DDCDD57A66B022EDCE481 /* Debug */,
+				B5DCEE548163711A2BFED7A1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		96004ED227799A5686ED7829 /* Build configuration list for PBXNativeTarget "RestaurantPicker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE2D3FBC4CB534C77B5C229D /* Debug */,
+				77B5408896040B4150E42F0E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E4CBABBE4A1BBA98ABD114B0 /* Build configuration list for PBXNativeTarget "RestaurantPickerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4C6EC4E11531D26BDB8DA146 /* Debug */,
+				7D63113634C9F8DB34AD2230 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = F21ECFFCF36C9BAAB1E06386 /* Project object */;
+}

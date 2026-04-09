@@ -60,17 +60,19 @@ final class RestaurantViewModel: ObservableObject {
     /// - Parameters:
     ///   - locationManager: Manager for user location. Defaults to a new instance.
     ///   - searchService: Service for searching restaurants. Defaults to a new instance.
+    @MainActor
     init(
-        locationManager: LocationManager = LocationManager(),
-        searchService: RestaurantSearchService = RestaurantSearchService()
+        locationManager: LocationManager? = nil,
+        searchService: RestaurantSearchService? = nil
     ) {
-        self.locationManager = locationManager
-        self.searchService = searchService
+        self.locationManager = locationManager ?? LocationManager()
+        self.searchService = searchService ?? RestaurantSearchService()
     }
 
     /// Creates a new RestaurantViewModel with pre-loaded restaurants (for testing/previews).
     ///
     /// - Parameter restaurants: Pre-loaded list of restaurants.
+    @MainActor
     init(restaurants: [Restaurant]) {
         self.locationManager = LocationManager()
         self.searchService = RestaurantSearchService()
@@ -121,10 +123,9 @@ final class RestaurantViewModel: ObservableObject {
             return
         }
 
-        // Search for restaurants
+        // Search for restaurants with a wide radius; the UI filter narrows what is shown.
         do {
-            let searchRadius = filterRadius ?? 10000 // Default to 10km if no filter
-            let results = try await searchService.searchRestaurants(near: location, radius: searchRadius)
+            let results = try await searchService.searchRestaurants(near: location, radius: 10000)
             restaurants = results
             applyFilter()
             errorMessage = nil
