@@ -45,6 +45,13 @@ final class RestaurantViewModel: ObservableObject {
         }
     }
 
+    /// Cuisines to include in the filtered list. Empty set means show all cuisines.
+    @Published var selectedCuisines: Set<String> = [] {
+        didSet {
+            applyFilter()
+        }
+    }
+
     /// Whether to show the selected restaurant sheet.
     @Published var showSelectedRestaurant = false
 
@@ -162,13 +169,36 @@ final class RestaurantViewModel: ObservableObject {
 
     // MARK: - Private Methods
 
-    /// Applies the distance filter to the restaurants list.
+    /// Applies the distance and cuisine filters to the restaurants list.
     private func applyFilter() {
-        guard let radius = filterRadius else {
-            filteredRestaurants = restaurants
-            return
+        var result = restaurants
+
+        // Apply distance filter
+        if let radius = filterRadius {
+            result = result.filter { $0.distance <= radius }
         }
-        filteredRestaurants = restaurants.filter { $0.distance <= radius }
+
+        // Apply cuisine filter
+        if !selectedCuisines.isEmpty {
+            result = result.filter { restaurant in
+                guard let category = restaurant.category else { return false }
+                return selectedCuisines.contains(category)
+            }
+        }
+
+        filteredRestaurants = result
+    }
+}
+
+// MARK: - Cuisine Filter
+
+extension RestaurantViewModel {
+    /// Unique, sorted list of cuisine categories available in the current restaurant set.
+    var availableCuisines: [String] {
+        restaurants
+            .compactMap(\.category)
+            .reduce(into: Set<String>()) { $0.insert($1) }
+            .sorted()
     }
 }
 

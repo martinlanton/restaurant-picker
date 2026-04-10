@@ -136,6 +136,149 @@ final class RestaurantViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.selectedRestaurant)
         XCTAssertFalse(viewModel.showSelectedRestaurant)
     }
+
+    // MARK: - Cuisine Filter Tests
+
+    @MainActor
+    func testAvailableCuisinesReturnsUniqueSortedCategories() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+
+        // Act
+        let cuisines = viewModel.availableCuisines
+
+        // Assert
+        XCTAssertEqual(cuisines, ["Italian", "Japanese", "Thai"])
+    }
+
+    @MainActor
+    func testAvailableCuisinesExcludesNilCategories() async {
+        // Arrange
+        let restaurants = sampleRestaurants + [
+            Restaurant(
+                id: UUID(),
+                name: "Unknown Place",
+                coordinate: .init(latitude: 40.7400, longitude: -74.0300),
+                distance: 600,
+                category: nil,
+                phoneNumber: nil,
+                url: nil
+            ),
+        ]
+        let viewModel = RestaurantViewModel(restaurants: restaurants)
+
+        // Act
+        let cuisines = viewModel.availableCuisines
+
+        // Assert — nil categories should not appear
+        XCTAssertEqual(cuisines, ["Italian", "Japanese", "Thai"])
+    }
+
+    @MainActor
+    func testFilterBySingleCuisine() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.selectedCuisines = ["Thai"]
+
+        // Assert
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Thai Place")
+    }
+
+    @MainActor
+    func testFilterByMultipleCuisines() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.selectedCuisines = ["Thai", "Japanese"]
+
+        // Assert
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 2)
+        let names = Set(viewModel.filteredRestaurants.map(\.name))
+        XCTAssertTrue(names.contains("Thai Place"))
+        XCTAssertTrue(names.contains("Sushi Bar"))
+    }
+
+    @MainActor
+    func testEmptyCuisineSelectionShowsAllRestaurants() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.selectedCuisines = []
+
+        // Assert
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 3)
+    }
+
+    @MainActor
+    func testCuisineAndDistanceFiltersCombine() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+
+        // Act — "Japanese" (Sushi Bar) is at 5500m, radius 3000 should exclude it
+        viewModel.selectedCuisines = ["Thai", "Japanese"]
+        viewModel.filterRadius = 3000
+
+        // Assert — only Thai Place (500m) passes both filters
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Thai Place")
+    }
+
+    @MainActor
+    func testCuisineFilterIncludesRestaurantsWithNilCategory() async {
+        // Arrange — a restaurant with nil category should show when no cuisine filter is active
+        let restaurants = sampleRestaurants + [
+            Restaurant(
+                id: UUID(),
+                name: "Mystery Spot",
+                coordinate: .init(latitude: 40.7400, longitude: -74.0300),
+                distance: 600,
+                category: nil,
+                phoneNumber: nil,
+                url: nil
+            ),
+        ]
+        let viewModel = RestaurantViewModel(restaurants: restaurants)
+        viewModel.filterRadius = nil
+
+        // Act — no cuisine filter
+        viewModel.selectedCuisines = []
+
+        // Assert — all 4 restaurants shown
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 4)
+    }
+
+    @MainActor
+    func testCuisineFilterExcludesRestaurantsWithNilCategory() async {
+        // Arrange
+        let restaurants = sampleRestaurants + [
+            Restaurant(
+                id: UUID(),
+                name: "Mystery Spot",
+                coordinate: .init(latitude: 40.7400, longitude: -74.0300),
+                distance: 600,
+                category: nil,
+                phoneNumber: nil,
+                url: nil
+            ),
+        ]
+        let viewModel = RestaurantViewModel(restaurants: restaurants)
+        viewModel.filterRadius = nil
+
+        // Act — filter by Thai only
+        viewModel.selectedCuisines = ["Thai"]
+
+        // Assert — only Thai Place, not Mystery Spot (nil category)
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Thai Place")
+    }
 }
 
 // MARK: - Restaurant Model Tests

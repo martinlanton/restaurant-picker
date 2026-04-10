@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		038F262C08AF2B38BE610F03 /* RestaurantListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7E4BB5A468088F806CA87D7 /* RestaurantListView.swift */; };
+		12A15B20A5377FA928BA459E /* CuisineFilterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A4C9B13240D7E04F2715A18 /* CuisineFilterView.swift */; };
 		1A3DD906720088095880BA07 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CDED6F440834894CF61D912 /* ContentView.swift */; };
 		30C689C36F780B151AEC63A1 /* RestaurantDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0A9CDA8D76204870047B57 /* RestaurantDetailView.swift */; };
 		3C3257E23177BAE8DBD2A6DD /* SelectedRestaurantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217B439E9E3B6932B4099F37 /* SelectedRestaurantView.swift */; };
@@ -43,6 +44,7 @@
 
 /* Begin PBXFileReference section */
 		04848EA3295282F2E5799B97 /* DistanceFilterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceFilterView.swift; sourceTree = "<group>"; };
+		0A4C9B13240D7E04F2715A18 /* CuisineFilterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CuisineFilterView.swift; sourceTree = "<group>"; };
 		1172838D8B26405ABAEBAE65 /* RestaurantViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantViewModel.swift; sourceTree = "<group>"; };
 		1C0A9CDA8D76204870047B57 /* RestaurantDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantDetailView.swift; sourceTree = "<group>"; };
 		217B439E9E3B6932B4099F37 /* SelectedRestaurantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedRestaurantView.swift; sourceTree = "<group>"; };
@@ -54,7 +56,9 @@
 		9CDED6F440834894CF61D912 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C8442B821FF7D8E36577A710 /* Restaurant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Restaurant.swift; sourceTree = "<group>"; };
 		CB01E38D859DCF8EF144B2F1 /* DecideButtonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecideButtonView.swift; sourceTree = "<group>"; };
+		D6E481D996A85C6AEEB173A6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		DE34FE57434FAEF35C8F3F72 /* RestaurantPicker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = RestaurantPicker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E7A708CDA057727B09237CE5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		E7E4BB5A468088F806CA87D7 /* RestaurantListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantListView.swift; sourceTree = "<group>"; };
 		ED30A9904166725840EFBCFE /* RestaurantPickerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantPickerUITests.swift; sourceTree = "<group>"; };
 		F38F01EE6FE35860665B9B96 /* RestaurantViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantViewModelTests.swift; sourceTree = "<group>"; };
@@ -76,6 +80,7 @@
 		357AFB7C8A4C32D59A086E69 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				0A4C9B13240D7E04F2715A18 /* CuisineFilterView.swift */,
 				CB01E38D859DCF8EF144B2F1 /* DecideButtonView.swift */,
 				04848EA3295282F2E5799B97 /* DistanceFilterView.swift */,
 				1C0A9CDA8D76204870047B57 /* RestaurantDetailView.swift */,
@@ -127,6 +132,7 @@
 		C6F65B53D414C9F2DD1713A7 /* RestaurantPickerTests */ = {
 			isa = PBXGroup;
 			children = (
+				E7A708CDA057727B09237CE5 /* Info.plist */,
 				F38F01EE6FE35860665B9B96 /* RestaurantViewModelTests.swift */,
 			);
 			path = RestaurantPickerTests;
@@ -144,6 +150,7 @@
 		EB0D20FDBBC72FDA65731770 /* RestaurantPickerUITests */ = {
 			isa = PBXGroup;
 			children = (
+				D6E481D996A85C6AEEB173A6 /* Info.plist */,
 				ED30A9904166725840EFBCFE /* RestaurantPickerUITests.swift */,
 			);
 			path = RestaurantPickerUITests;
@@ -287,6 +294,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A3DD906720088095880BA07 /* ContentView.swift in Sources */,
+				12A15B20A5377FA928BA459E /* CuisineFilterView.swift in Sources */,
 				59AAA083C39834545139DE8D /* DecideButtonView.swift in Sources */,
 				DA0023A0C768685BFFA306FE /* DistanceFilterView.swift in Sources */,
 				F0E203BED520955F16917BC3 /* Extensions.swift in Sources */,
@@ -322,6 +330,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				INFOPLIST_FILE = RestaurantPickerTests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -403,6 +412,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				INFOPLIST_FILE = RestaurantPickerUITests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -437,6 +447,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				INFOPLIST_FILE = RestaurantPickerTests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -454,6 +465,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				INFOPLIST_FILE = RestaurantPickerUITests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

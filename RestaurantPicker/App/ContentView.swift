@@ -15,6 +15,14 @@ struct ContentView: View {
                     .padding(.horizontal)
                     .padding(.top, 8)
 
+                // Cuisine filter
+                CuisineFilterView(
+                    availableCuisines: viewModel.availableCuisines,
+                    selectedCuisines: $viewModel.selectedCuisines
+                )
+                .padding(.horizontal)
+                .padding(.top, 8)
+
                 // Main content area
                 if viewModel.isLoading {
                     loadingView
@@ -100,7 +108,7 @@ struct ContentView: View {
                 .foregroundColor(.secondary)
             Text("No restaurants found")
                 .font(.headline)
-            Text("Try increasing the distance filter")
+            Text("Try increasing the distance or adjusting cuisine filters")
                 .foregroundColor(.secondary)
             Spacer()
         }

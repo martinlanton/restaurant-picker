@@ -53,6 +53,7 @@ RestaurantPicker/
 │   │   ├── RestaurantDetailView.swift
 │   │   ├── SelectedRestaurantView.swift
 │   │   ├── DistanceFilterView.swift
+│   │   ├── CuisineFilterView.swift
 │   │   └── DecideButtonView.swift
 │   ├── Services/
 │   │   ├── LocationManager.swift
@@ -89,6 +90,7 @@ RestaurantPicker/
 │              │  - selectedRestaurant │                       │
 │              │  - isLoading          │                       │
 │              │  - filterRadius       │                       │
+│              │  - selectedCuisines   │                       │
 │              └───────────┬───────────┘                       │
 │                          │                                   │
 ├──────────────────────────┼───────────────────────────────────┤
@@ -851,6 +853,28 @@ viewModel.filterRadius = 1000
 viewModel.filterRadius = nil
 ```
 
+### Cuisine Filtering
+
+Users can filter by one or more cuisine types. The available cuisines are
+derived dynamically from the fetched restaurant categories:
+
+```swift
+// Available cuisines (computed from current restaurants)
+viewModel.availableCuisines  // e.g., ["Italian", "Japanese", "Thai"]
+
+// Filter by a single cuisine
+viewModel.selectedCuisines = ["Thai"]
+
+// Filter by multiple cuisines
+viewModel.selectedCuisines = ["Thai", "Japanese"]
+
+// Show all cuisines (empty set = no filter)
+viewModel.selectedCuisines = []
+```
+
+Distance and cuisine filters combine — a restaurant must pass **both** filters
+to appear in the list.
+
 ### Random Selection
 
 The random selection algorithm:
@@ -935,6 +959,12 @@ struct ContentView: View {
             VStack {
                 // Distance filter control
                 DistanceFilterView(radius: $viewModel.filterRadius)
+                
+                // Cuisine filter control
+                CuisineFilterView(
+                    availableCuisines: viewModel.availableCuisines,
+                    selectedCuisines: $viewModel.selectedCuisines
+                )
                 
                 // Restaurant list — tapping a row pushes RestaurantDetailView
                 RestaurantListView(
