@@ -6,7 +6,9 @@ This repository implements an iOS application that helps users randomly select n
 
 **Key Features**:
 - Display restaurants from Apple Maps within a specified radius
+- Multi-cuisine parallel search (36 cuisine-specific queries) for broader coverage
 - Filter restaurants by distance (configurable)
+- Tap any restaurant to view details, call, or get directions in Apple Maps
 - Random selection with visual feedback
 - Simple, intuitive single-button interface
 - Native iOS experience with SwiftUI
@@ -28,9 +30,9 @@ This repository implements an iOS application that helps users randomly select n
 - **Language**: Swift 5.9+
 - **UI Framework**: SwiftUI
 - **Minimum iOS**: iOS 17.0+
-- **IDE**: Xcode 15+
+- **IDE**: Xcode 16+
 - **Architecture**: MVVM (Model-View-ViewModel)
-- **Maps**: Apple MapKit (MKLocalSearch for restaurant discovery)
+- **Maps**: Apple MapKit (parallel multi-cuisine MKLocalSearch for restaurant discovery)
 - **Location**: CoreLocation
 
 ### Project Structure
@@ -48,6 +50,8 @@ RestaurantPicker/
 │   ├── Views/
 │   │   ├── RestaurantListView.swift
 │   │   ├── RestaurantRowView.swift
+│   │   ├── RestaurantDetailView.swift
+│   │   ├── SelectedRestaurantView.swift
 │   │   ├── DistanceFilterView.swift
 │   │   └── DecideButtonView.swift
 │   ├── Services/
@@ -69,8 +73,13 @@ RestaurantPicker/
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
 │  │ ContentView │  │ ListView    │  │ DecideButtonView    │  │
 │  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘  │
-│         │                │                     │             │
-│         └────────────────┼─────────────────────┘             │
+│         │         ┌──────┴──────┐              │             │
+│         │         │  DetailView │              │             │
+│         │         └─────────────┘              │             │
+│         │    ┌──────────────────────┐          │             │
+│         │    │ SelectedRestaurantView│          │             │
+│         │    └──────────────────────┘          │             │
+│         └────────────────┬─────────────────────┘             │
 │                          │ @StateObject / @ObservedObject    │
 ├──────────────────────────┼───────────────────────────────────┤
 │                   ViewModel Layer                            │
@@ -858,46 +867,43 @@ func selectRandomRestaurant() -> Restaurant? {
 
 ### MapKit Search
 
-To search for nearby restaurants using MapKit:
+The app searches for nearby restaurants using parallel cuisine-specific queries
+to overcome `MKLocalSearch`'s ~25 result limit per query:
 
 ```swift
 /// Searches for restaurants near a location.
 ///
+/// Runs 36 cuisine-specific searches in parallel (e.g., "thai restaurant",
+/// "italian restaurant", etc.) then deduplicates results by name + proximity.
+///
 /// - Parameters:
 ///   - location: The center point for the search.
 ///   - radius: Search radius in meters.
-/// - Returns: Array of discovered restaurants.
+/// - Returns: Array of discovered restaurants sorted by distance.
 func searchRestaurants(near location: CLLocation, radius: Double) async throws -> [Restaurant] {
-    let request = MKLocalSearch.Request()
-    request.naturalLanguageQuery = "restaurants"
-    request.region = MKCoordinateRegion(
+    let region = MKCoordinateRegion(
         center: location.coordinate,
         latitudinalMeters: radius * 2,
         longitudinalMeters: radius * 2
     )
-    
-    let search = MKLocalSearch(request: request)
-    let response = try await search.start()
-    
-    return response.mapItems.compactMap { item in
-        guard let name = item.name else { return nil }
-        let distance = location.distance(from: CLLocation(
-            latitude: item.placemark.coordinate.latitude,
-            longitude: item.placemark.coordinate.longitude
-        ))
-        
-        return Restaurant(
-            id: UUID(),
-            name: name,
-            coordinate: item.placemark.coordinate,
-            distance: distance,
-            category: item.pointOfInterestCategory?.rawValue,
-            phoneNumber: item.phoneNumber,
-            url: item.url
-        )
+
+    let allResults = await withTaskGroup(of: [(Restaurant, String)].self) { group in
+        for cuisine in Self.cuisineQueries {
+            group.addTask {
+                await self.performSearch(
+                    query: cuisine.query,
+                    label: cuisine.label,
+                    region: region,
+                    location: location,
+                    radius: radius
+                )
+            }
+        }
+        // ... collect and return combined results
     }
-    .filter { $0.distance <= radius }
-    .sorted { $0.distance < $1.distance }
+
+    // Deduplicate by name + proximity, assign cuisine label as category
+    // ... return unique results sorted by distance
 }
 ```
 
@@ -930,7 +936,7 @@ struct ContentView: View {
                 // Distance filter control
                 DistanceFilterView(radius: $viewModel.filterRadius)
                 
-                // Restaurant list
+                // Restaurant list — tapping a row pushes RestaurantDetailView
                 RestaurantListView(
                     restaurants: viewModel.filteredRestaurants,
                     selectedRestaurant: viewModel.selectedRestaurant
@@ -941,7 +947,15 @@ struct ContentView: View {
                     viewModel.selectRandomRestaurant()
                 }
             }
-            .navigationTitle("Take-Out Decidator")
+            .navigationTitle("Restaurant Picker")
+            // Random selection result presented as a sheet
+            .sheet(isPresented: $viewModel.showSelectedRestaurant) {
+                if let restaurant = viewModel.selectedRestaurant {
+                    SelectedRestaurantView(restaurant: restaurant) {
+                        viewModel.clearSelection()
+                    }
+                }
+            }
         }
         .task {
             await viewModel.fetchNearbyRestaurants()
@@ -949,3 +963,10 @@ struct ContentView: View {
     }
 }
 ```
+
+#### Navigation Flow
+- **List → Detail**: `RestaurantListView` wraps each row in a `NavigationLink`
+  that pushes `RestaurantDetailView` (shows info, call, Maps, website buttons).
+- **Random Pick → Sheet**: The "Pick a Restaurant!" button triggers
+  `SelectedRestaurantView` as a modal sheet with celebration UI and a
+  "Pick Again" button.
