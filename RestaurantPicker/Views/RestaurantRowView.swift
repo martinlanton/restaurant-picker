@@ -2,13 +2,15 @@ import SwiftUI
 
 /// A single row displaying restaurant information.
 ///
-/// Shows the restaurant name, category (if available), and distance.
+/// Shows the restaurant name, category (if available), star rating, and distance.
 struct RestaurantRowView: View {
     /// The restaurant to display.
     let restaurant: Restaurant
 
     /// Whether this restaurant is currently selected.
     var isSelected: Bool = false
+
+    @EnvironmentObject private var ratingStore: RatingStore
 
     var body: some View {
         HStack {
@@ -17,10 +19,18 @@ struct RestaurantRowView: View {
                     .font(.headline)
                     .foregroundColor(isSelected ? .accentColor : .primary)
 
-                if let category = restaurant.category {
-                    Text(category)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                HStack(spacing: 8) {
+                    if let category = restaurant.category {
+                        Text(category)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+
+                    StarRatingView(
+                        rating: ratingBinding,
+                        isInteractive: false,
+                        starSize: 12
+                    )
                 }
             }
 
@@ -37,6 +47,15 @@ struct RestaurantRowView: View {
         .padding(.vertical, 4)
         .background(isSelected ? Color.accentColor.opacity(0.1) : Color.clear)
         .cornerRadius(8)
+    }
+
+    // MARK: - Private
+
+    private var ratingBinding: Binding<Int?> {
+        Binding(
+            get: { ratingStore.rating(for: restaurant) },
+            set: { ratingStore.setRating($0, for: restaurant) }
+        )
     }
 }
 
@@ -70,5 +89,6 @@ struct RestaurantRowView: View {
         )
     }
     .padding()
+    .environmentObject(RatingStore())
 }
 

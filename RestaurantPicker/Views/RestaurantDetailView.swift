@@ -11,6 +11,8 @@ struct RestaurantDetailView: View {
     /// The restaurant to display.
     let restaurant: Restaurant
 
+    @EnvironmentObject private var ratingStore: RatingStore
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -26,6 +28,18 @@ struct RestaurantDetailView: View {
                     .fontWeight(.bold)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
+
+                // User rating
+                VStack(spacing: 4) {
+                    Text("Your Rating")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    StarRatingView(
+                        rating: ratingBinding,
+                        isInteractive: true,
+                        starSize: 28
+                    )
+                }
 
                 // Info section
                 VStack(spacing: 12) {
@@ -115,6 +129,13 @@ struct RestaurantDetailView: View {
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving,
         ])
     }
+
+    private var ratingBinding: Binding<Int?> {
+        Binding(
+            get: { ratingStore.rating(for: restaurant) },
+            set: { ratingStore.setRating($0, for: restaurant) }
+        )
+    }
 }
 
 // MARK: - Detail Row
@@ -154,4 +175,5 @@ private struct DetailRow: View {
             )
         )
     }
+    .environmentObject(RatingStore())
 }

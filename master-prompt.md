@@ -11,6 +11,7 @@ This repository implements an iOS application that helps users randomly select n
 - Include or exclude cuisine types via a filter sheet
 - Tap any restaurant to view details, call, or get directions in Apple Maps
 - Random selection with visual feedback
+- User ratings (1–5 stars) stored locally on device via UserDefaults
 - Simple, intuitive single-button interface
 - Native iOS experience with SwiftUI
 
@@ -55,14 +56,17 @@ RestaurantPicker/
 │   │   ├── SelectedRestaurantView.swift
 │   │   ├── DistanceFilterView.swift
 │   │   ├── CuisineFilterView.swift
+│   │   ├── StarRatingView.swift
 │   │   └── DecideButtonView.swift
 │   ├── Services/
 │   │   ├── LocationManager.swift
-│   │   └── RestaurantSearchService.swift
+│   │   ├── RestaurantSearchService.swift
+│   │   └── RatingStore.swift
 │   └── Utilities/
 │       └── Extensions.swift
 ├── RestaurantPickerTests/
-│   └── RestaurantViewModelTests.swift
+│   ├── RestaurantViewModelTests.swift
+│   └── RatingStoreTests.swift
 └── RestaurantPickerUITests/
     └── RestaurantPickerUITests.swift
 ```
@@ -881,6 +885,32 @@ viewModel.activeCuisineFilterCount  // selectedCuisines.count + excludedCuisines
 A cuisine cannot be both included and excluded — toggling one automatically
 removes it from the other. Distance, include, and exclude filters all combine —
 a restaurant must pass **all three** to appear in the list.
+
+### User Ratings
+
+Users can rate restaurants 1–5 stars. Ratings are stored locally on device
+using `UserDefaults` via `RatingStore` and are never shared.
+
+```swift
+let store = RatingStore()
+
+// Save a rating
+store.setRating(4, for: restaurant)
+
+// Retrieve a rating (nil if not rated)
+let rating = store.rating(for: restaurant)  // 4
+
+// Remove a rating
+store.setRating(nil, for: restaurant)
+```
+
+Ratings are keyed by restaurant name + coordinate (not UUID) so the same
+physical restaurant retains its rating across app launches and searches.
+
+- **Row view**: 5 small read-only stars (12pt) to the right of the cuisine category
+- **Detail view**: 5 larger tappable stars (28pt) for rating interaction
+- **No rating**: stars appear greyed out
+- **Rated**: filled stars are yellow with a white stroke; empty stars have a white stroke
 
 ### Random Selection
 
