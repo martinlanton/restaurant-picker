@@ -13,10 +13,12 @@ struct RestaurantListView: View {
 
     var body: some View {
         List(restaurants) { restaurant in
-            RestaurantRowView(
-                restaurant: restaurant,
-                isSelected: restaurant.id == selectedRestaurant?.id
-            )
+            NavigationLink(destination: RestaurantDetailView(restaurant: restaurant)) {
+                RestaurantRowView(
+                    restaurant: restaurant,
+                    isSelected: restaurant.id == selectedRestaurant?.id
+                )
+            }
         }
         .listStyle(.plain)
     }

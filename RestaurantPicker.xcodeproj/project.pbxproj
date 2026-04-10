@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		038F262C08AF2B38BE610F03 /* RestaurantListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7E4BB5A468088F806CA87D7 /* RestaurantListView.swift */; };
 		1A3DD906720088095880BA07 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CDED6F440834894CF61D912 /* ContentView.swift */; };
+		30C689C36F780B151AEC63A1 /* RestaurantDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0A9CDA8D76204870047B57 /* RestaurantDetailView.swift */; };
 		3C3257E23177BAE8DBD2A6DD /* SelectedRestaurantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217B439E9E3B6932B4099F37 /* SelectedRestaurantView.swift */; };
 		40794AFB53477348512269D7 /* Restaurant.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8442B821FF7D8E36577A710 /* Restaurant.swift */; };
 		59AAA083C39834545139DE8D /* DecideButtonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB01E38D859DCF8EF144B2F1 /* DecideButtonView.swift */; };
@@ -43,6 +44,7 @@
 /* Begin PBXFileReference section */
 		04848EA3295282F2E5799B97 /* DistanceFilterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceFilterView.swift; sourceTree = "<group>"; };
 		1172838D8B26405ABAEBAE65 /* RestaurantViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantViewModel.swift; sourceTree = "<group>"; };
+		1C0A9CDA8D76204870047B57 /* RestaurantDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantDetailView.swift; sourceTree = "<group>"; };
 		217B439E9E3B6932B4099F37 /* SelectedRestaurantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedRestaurantView.swift; sourceTree = "<group>"; };
 		36FCA51531FACB56DB0B9346 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		4498691F83877FECC94FC879 /* RestaurantPickerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantPickerApp.swift; sourceTree = "<group>"; };
@@ -52,7 +54,7 @@
 		9CDED6F440834894CF61D912 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C8442B821FF7D8E36577A710 /* Restaurant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Restaurant.swift; sourceTree = "<group>"; };
 		CB01E38D859DCF8EF144B2F1 /* DecideButtonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecideButtonView.swift; sourceTree = "<group>"; };
-		DE34FE57434FAEF35C8F3F72 /* RestaurantPicker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RestaurantPicker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DE34FE57434FAEF35C8F3F72 /* RestaurantPicker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = RestaurantPicker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E7E4BB5A468088F806CA87D7 /* RestaurantListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantListView.swift; sourceTree = "<group>"; };
 		ED30A9904166725840EFBCFE /* RestaurantPickerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantPickerUITests.swift; sourceTree = "<group>"; };
 		F38F01EE6FE35860665B9B96 /* RestaurantViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantViewModelTests.swift; sourceTree = "<group>"; };
@@ -76,6 +78,7 @@
 			children = (
 				CB01E38D859DCF8EF144B2F1 /* DecideButtonView.swift */,
 				04848EA3295282F2E5799B97 /* DistanceFilterView.swift */,
+				1C0A9CDA8D76204870047B57 /* RestaurantDetailView.swift */,
 				E7E4BB5A468088F806CA87D7 /* RestaurantListView.swift */,
 				65A54370EA04D622BA47A635 /* RestaurantRowView.swift */,
 				217B439E9E3B6932B4099F37 /* SelectedRestaurantView.swift */,
@@ -232,6 +235,9 @@
 					01A55A7339FA4703322AFF55 = {
 						DevelopmentTeam = "";
 					};
+					44C605C85FED3C70F4417710 = {
+						DevelopmentTeam = "";
+					};
 					5BCF7D3911585936A1A8E4FB = {
 						DevelopmentTeam = "";
 						TestTargetID = 44C605C85FED3C70F4417710;
@@ -286,6 +292,7 @@
 				F0E203BED520955F16917BC3 /* Extensions.swift in Sources */,
 				BFE5DD45333969863BC38FE6 /* LocationManager.swift in Sources */,
 				40794AFB53477348512269D7 /* Restaurant.swift in Sources */,
+				30C689C36F780B151AEC63A1 /* RestaurantDetailView.swift in Sources */,
 				038F262C08AF2B38BE610F03 /* RestaurantListView.swift in Sources */,
 				93E98F355EBD296DE9F0BF34 /* RestaurantPickerApp.swift in Sources */,
 				7EC76E57EC7249E407A4B219 /* RestaurantRowView.swift in Sources */,
@@ -414,7 +421,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = KQYPV73342;
 				INFOPLIST_FILE = RestaurantPicker/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -523,7 +529,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = KQYPV73342;
 				INFOPLIST_FILE = RestaurantPicker/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
