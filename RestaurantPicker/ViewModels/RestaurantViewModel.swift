@@ -52,6 +52,13 @@ final class RestaurantViewModel: ObservableObject {
         }
     }
 
+    /// Cuisines to exclude from the filtered list. Empty set means exclude nothing.
+    @Published var excludedCuisines: Set<String> = [] {
+        didSet {
+            applyFilter()
+        }
+    }
+
     /// Whether to show the selected restaurant sheet.
     @Published var showSelectedRestaurant = false
 
@@ -169,7 +176,7 @@ final class RestaurantViewModel: ObservableObject {
 
     // MARK: - Private Methods
 
-    /// Applies the distance and cuisine filters to the restaurants list.
+    /// Applies the distance, include, and exclude cuisine filters to the restaurants list.
     private func applyFilter() {
         var result = restaurants
 
@@ -178,11 +185,19 @@ final class RestaurantViewModel: ObservableObject {
             result = result.filter { $0.distance <= radius }
         }
 
-        // Apply cuisine filter
+        // Apply include cuisine filter
         if !selectedCuisines.isEmpty {
             result = result.filter { restaurant in
                 guard let category = restaurant.category else { return false }
                 return selectedCuisines.contains(category)
+            }
+        }
+
+        // Apply exclude cuisine filter
+        if !excludedCuisines.isEmpty {
+            result = result.filter { restaurant in
+                guard let category = restaurant.category else { return true }
+                return !excludedCuisines.contains(category)
             }
         }
 
@@ -199,6 +214,11 @@ extension RestaurantViewModel {
             .compactMap(\.category)
             .reduce(into: Set<String>()) { $0.insert($1) }
             .sorted()
+    }
+
+    /// Total number of active cuisine filters (includes + excludes).
+    var activeCuisineFilterCount: Int {
+        selectedCuisines.count + excludedCuisines.count
     }
 }
 

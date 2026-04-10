@@ -7,21 +7,32 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var viewModel = RestaurantViewModel()
 
+    /// Whether the cuisine filter sheet is presented.
+    @State private var showCuisineFilter = false
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Distance filter
-                DistanceFilterView(selectedRadius: $viewModel.filterRadius)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+                // Distance filter with cuisine filter button
+                HStack(alignment: .bottom, spacing: 16) {
+                    cuisineFilterButton
 
-                // Cuisine filter
-                CuisineFilterView(
-                    availableCuisines: viewModel.availableCuisines,
-                    selectedCuisines: $viewModel.selectedCuisines
-                )
+                    DistanceFilterView(selectedRadius: $viewModel.filterRadius)
+                }
                 .padding(.horizontal)
                 .padding(.top, 8)
+
+                // Restaurant count
+                if !viewModel.isLoading, viewModel.errorMessage == nil {
+                    HStack {
+                        Text("\(viewModel.filteredRestaurants.count) restaurant\(viewModel.filteredRestaurants.count == 1 ? "" : "s")")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 4)
+                }
 
                 // Main content area
                 if viewModel.isLoading {
@@ -54,6 +65,14 @@ struct ContentView: View {
                     .disabled(viewModel.isLoading)
                 }
             }
+            .sheet(isPresented: $showCuisineFilter) {
+                CuisineFilterView(
+                    availableCuisines: viewModel.availableCuisines,
+                    selectedCuisines: $viewModel.selectedCuisines,
+                    excludedCuisines: $viewModel.excludedCuisines
+                )
+                .presentationDetents([.medium, .large])
+            }
             .sheet(isPresented: $viewModel.showSelectedRestaurant) {
                 if let restaurant = viewModel.selectedRestaurant {
                     SelectedRestaurantView(restaurant: restaurant) {
@@ -68,6 +87,45 @@ struct ContentView: View {
     }
 
     // MARK: - View Components
+
+    /// A button that opens the cuisine filter sheet.
+    /// Styled to match the distance filter chips.
+    /// Shows a badge with the active filter count when filters are applied.
+    private var cuisineFilterButton: some View {
+        Button {
+            showCuisineFilter = true
+        } label: {
+            Image(systemName: viewModel.activeCuisineFilterCount > 0
+                ? "line.3.horizontal.decrease.circle.fill"
+                : "line.3.horizontal.decrease.circle")
+                .font(.system(size: 32))
+                .frame(width: 52, height: 52)
+                .background(
+                    viewModel.activeCuisineFilterCount > 0
+                        ? Color.accentColor
+                        : Color.secondary.opacity(0.2)
+                )
+                .foregroundColor(
+                    viewModel.activeCuisineFilterCount > 0
+                        ? .white
+                        : .primary
+                )
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            if viewModel.activeCuisineFilterCount > 0 {
+                Text("\(viewModel.activeCuisineFilterCount)")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .frame(minWidth: 16, minHeight: 16)
+                    .background(Color.red)
+                    .clipShape(Circle())
+                    .offset(x: 8, y: -8)
+            }
+        }
+    }
 
     private var loadingView: some View {
         VStack(spacing: 16) {
@@ -127,4 +185,3 @@ struct ContentView: View {
 #Preview {
     ContentView()
 }
-

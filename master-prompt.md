@@ -8,6 +8,7 @@ This repository implements an iOS application that helps users randomly select n
 - Display restaurants from Apple Maps within a specified radius
 - Multi-cuisine parallel search (36 cuisine-specific queries) for broader coverage
 - Filter restaurants by distance (configurable)
+- Include or exclude cuisine types via a filter sheet
 - Tap any restaurant to view details, call, or get directions in Apple Maps
 - Random selection with visual feedback
 - Simple, intuitive single-button interface
@@ -91,6 +92,7 @@ RestaurantPicker/
 │              │  - isLoading          │                       │
 │              │  - filterRadius       │                       │
 │              │  - selectedCuisines   │                       │
+│              │  - excludedCuisines   │                       │
 │              └───────────┬───────────┘                       │
 │                          │                                   │
 ├──────────────────────────┼───────────────────────────────────┤
@@ -855,25 +857,30 @@ viewModel.filterRadius = nil
 
 ### Cuisine Filtering
 
-Users can filter by one or more cuisine types. The available cuisines are
-derived dynamically from the fetched restaurant categories:
+Users can filter by including or excluding cuisine types. The available cuisines
+are derived dynamically from the fetched restaurant categories. Both filters are
+accessed through a filter icon in the navigation bar that opens a sheet.
 
 ```swift
 // Available cuisines (computed from current restaurants)
 viewModel.availableCuisines  // e.g., ["Italian", "Japanese", "Thai"]
 
-// Filter by a single cuisine
+// Include filter — show only these cuisines (empty = show all)
 viewModel.selectedCuisines = ["Thai"]
-
-// Filter by multiple cuisines
 viewModel.selectedCuisines = ["Thai", "Japanese"]
+viewModel.selectedCuisines = []  // show all
 
-// Show all cuisines (empty set = no filter)
-viewModel.selectedCuisines = []
+// Exclude filter — hide these cuisines (empty = exclude nothing)
+viewModel.excludedCuisines = ["Italian"]
+viewModel.excludedCuisines = []  // exclude nothing
+
+// Active filter count for badge display
+viewModel.activeCuisineFilterCount  // selectedCuisines.count + excludedCuisines.count
 ```
 
-Distance and cuisine filters combine — a restaurant must pass **both** filters
-to appear in the list.
+A cuisine cannot be both included and excluded — toggling one automatically
+removes it from the other. Distance, include, and exclude filters all combine —
+a restaurant must pass **all three** to appear in the list.
 
 ### Random Selection
 
@@ -953,18 +960,13 @@ Main view hierarchy:
 ```swift
 struct ContentView: View {
     @StateObject private var viewModel = RestaurantViewModel()
+    @State private var showCuisineFilter = false
     
     var body: some View {
         NavigationStack {
             VStack {
                 // Distance filter control
                 DistanceFilterView(radius: $viewModel.filterRadius)
-                
-                // Cuisine filter control
-                CuisineFilterView(
-                    availableCuisines: viewModel.availableCuisines,
-                    selectedCuisines: $viewModel.selectedCuisines
-                )
                 
                 // Restaurant list — tapping a row pushes RestaurantDetailView
                 RestaurantListView(
@@ -978,6 +980,22 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("Restaurant Picker")
+            .toolbar {
+                // Cuisine filter icon — opens sheet, shows badge when active
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button { showCuisineFilter = true } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    }
+                }
+            }
+            // Cuisine filter sheet with Include/Exclude sections
+            .sheet(isPresented: $showCuisineFilter) {
+                CuisineFilterView(
+                    availableCuisines: viewModel.availableCuisines,
+                    selectedCuisines: $viewModel.selectedCuisines,
+                    excludedCuisines: $viewModel.excludedCuisines
+                )
+            }
             // Random selection result presented as a sheet
             .sheet(isPresented: $viewModel.showSelectedRestaurant) {
                 if let restaurant = viewModel.selectedRestaurant {
@@ -997,6 +1015,8 @@ struct ContentView: View {
 #### Navigation Flow
 - **List → Detail**: `RestaurantListView` wraps each row in a `NavigationLink`
   that pushes `RestaurantDetailView` (shows info, call, Maps, website buttons).
+- **Filter Icon → Sheet**: Toolbar filter icon opens `CuisineFilterView` as a
+  half/full-height sheet with Include/Exclude sections and a Reset button.
 - **Random Pick → Sheet**: The "Pick a Restaurant!" button triggers
   `SelectedRestaurantView` as a modal sheet with celebration UI and a
   "Pick Again" button.

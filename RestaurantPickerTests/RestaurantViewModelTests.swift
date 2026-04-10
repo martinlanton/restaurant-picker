@@ -279,6 +279,156 @@ final class RestaurantViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
         XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Thai Place")
     }
+
+    // MARK: - Exclude Cuisine Filter Tests
+
+    @MainActor
+    func testExcludeSingleCuisine() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.excludedCuisines = ["Thai"]
+
+        // Assert — Thai Place excluded, 2 remain
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 2)
+        let names = Set(viewModel.filteredRestaurants.map(\.name))
+        XCTAssertFalse(names.contains("Thai Place"))
+        XCTAssertTrue(names.contains("Pizza Shop"))
+        XCTAssertTrue(names.contains("Sushi Bar"))
+    }
+
+    @MainActor
+    func testExcludeMultipleCuisines() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.excludedCuisines = ["Thai", "Italian"]
+
+        // Assert — only Sushi Bar (Japanese) remains
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Sushi Bar")
+    }
+
+    @MainActor
+    func testEmptyExcludeShowsAllRestaurants() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.excludedCuisines = []
+
+        // Assert
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 3)
+    }
+
+    @MainActor
+    func testExcludeAndIncludeCombine() async {
+        // Arrange — include Thai + Japanese, exclude Japanese
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.selectedCuisines = ["Thai", "Japanese"]
+        viewModel.excludedCuisines = ["Japanese"]
+
+        // Assert — only Thai Place: included by selectedCuisines, not excluded
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Thai Place")
+    }
+
+    @MainActor
+    func testExcludeAndDistanceCombine() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+
+        // Act — exclude Thai, radius 3000 (excludes Sushi Bar at 5500)
+        viewModel.excludedCuisines = ["Thai"]
+        viewModel.filterRadius = 3000
+
+        // Assert — only Pizza Shop (Italian, 2000m)
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Pizza Shop")
+    }
+
+    @MainActor
+    func testExcludeDoesNotAffectNilCategoryWhenNoInclude() async {
+        // Arrange — restaurant with nil category should NOT be excluded
+        let restaurants = sampleRestaurants + [
+            Restaurant(
+                id: UUID(),
+                name: "Mystery Spot",
+                coordinate: .init(latitude: 40.7400, longitude: -74.0300),
+                distance: 600,
+                category: nil,
+                phoneNumber: nil,
+                url: nil
+            ),
+        ]
+        let viewModel = RestaurantViewModel(restaurants: restaurants)
+        viewModel.filterRadius = nil
+
+        // Act — exclude Thai only
+        viewModel.excludedCuisines = ["Thai"]
+
+        // Assert — Mystery Spot (nil category) remains, Thai Place excluded
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 3)
+        let names = Set(viewModel.filteredRestaurants.map(\.name))
+        XCTAssertTrue(names.contains("Mystery Spot"))
+        XCTAssertFalse(names.contains("Thai Place"))
+    }
+
+    // MARK: - Active Filter Count Tests
+
+    @MainActor
+    func testActiveCuisineFilterCountWithNoFilters() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+
+        // Assert
+        XCTAssertEqual(viewModel.activeCuisineFilterCount, 0)
+    }
+
+    @MainActor
+    func testActiveCuisineFilterCountWithIncludeOnly() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+
+        // Act
+        viewModel.selectedCuisines = ["Thai", "Japanese"]
+
+        // Assert
+        XCTAssertEqual(viewModel.activeCuisineFilterCount, 2)
+    }
+
+    @MainActor
+    func testActiveCuisineFilterCountWithExcludeOnly() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+
+        // Act
+        viewModel.excludedCuisines = ["Italian"]
+
+        // Assert
+        XCTAssertEqual(viewModel.activeCuisineFilterCount, 1)
+    }
+
+    @MainActor
+    func testActiveCuisineFilterCountWithBoth() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+
+        // Act
+        viewModel.selectedCuisines = ["Thai"]
+        viewModel.excludedCuisines = ["Italian", "Japanese"]
+
+        // Assert
+        XCTAssertEqual(viewModel.activeCuisineFilterCount, 3)
+    }
 }
 
 // MARK: - Restaurant Model Tests
