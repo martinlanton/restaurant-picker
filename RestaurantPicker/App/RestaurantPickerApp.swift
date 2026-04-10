@@ -6,10 +6,17 @@ import SwiftUI
 @main
 struct RestaurantPickerApp: App {
     @StateObject private var ratingStore = RatingStore()
+    @StateObject private var viewModel: RestaurantViewModel
+
+    init() {
+        let store = RatingStore()
+        _ratingStore = StateObject(wrappedValue: store)
+        _viewModel = StateObject(wrappedValue: RestaurantViewModel(ratingStore: store))
+    }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(viewModel: viewModel)
                 .environmentObject(ratingStore)
         }
     }

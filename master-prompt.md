@@ -97,6 +97,7 @@ RestaurantPicker/
 │              │  - filterRadius       │                       │
 │              │  - selectedCuisines   │                       │
 │              │  - excludedCuisines   │                       │
+│              │  - minimumRating      │                       │
 │              └───────────┬───────────┘                       │
 │                          │                                   │
 ├──────────────────────────┼───────────────────────────────────┤
@@ -911,6 +912,35 @@ physical restaurant retains its rating across app launches and searches.
 - **Detail view**: 5 larger tappable stars (28pt) for rating interaction
 - **No rating**: stars appear greyed out
 - **Rated**: filled stars are yellow with a white stroke; empty stars have a white stroke
+
+#### Rating Filtering
+
+Users can filter restaurants by minimum star rating via the filter sheet.
+The filter is pyramidal — selecting "2+" shows restaurants rated 2, 3, 4, and 5.
+Unrated restaurants are hidden when a rating filter is active.
+
+```swift
+viewModel.minimumRating = 3   // shows 3, 4, 5 star restaurants
+viewModel.minimumRating = nil // shows all (no rating filter)
+```
+
+Options: `All`, `1+`, `2+`, `3+`, `4+`, `5`
+
+#### Weighted Random Selection
+
+When no rating filter is active, random selection is weighted by rating
+using a quadratic scale centred on 3★ = 1.0:
+
+| Rating | Weight |
+|--------|--------|
+| 1★     | 0.25   |
+| 2★     | 0.50   |
+| 3★     | 1.00   |
+| 4★     | 2.00   |
+| 5★     | 4.00   |
+| Unrated| 1.00   |
+
+When a rating filter **is** active, selection is uniform (equal probability).
 
 ### Random Selection
 

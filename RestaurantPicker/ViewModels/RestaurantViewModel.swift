@@ -59,6 +59,14 @@ final class RestaurantViewModel: ObservableObject {
         }
     }
 
+    /// Minimum star rating to include. Nil means show all (no rating filter).
+    /// Pyramidal: setting 2 shows restaurants rated 2, 3, 4, and 5.
+    @Published var minimumRating: Int? = nil {
+        didSet {
+            applyFilter()
+        }
+    }
+
     /// Whether to show the selected restaurant sheet.
     @Published var showSelectedRestaurant = false
 
@@ -66,6 +74,7 @@ final class RestaurantViewModel: ObservableObject {
 
     private let locationManager: LocationManager
     private let searchService: RestaurantSearchService
+    private(set) var ratingStore: RatingStore
 
     // MARK: - Initialization
 
@@ -74,22 +83,28 @@ final class RestaurantViewModel: ObservableObject {
     /// - Parameters:
     ///   - locationManager: Manager for user location. Defaults to a new instance.
     ///   - searchService: Service for searching restaurants. Defaults to a new instance.
+    ///   - ratingStore: Store for user ratings. Defaults to a new instance.
     @MainActor
     init(
         locationManager: LocationManager? = nil,
-        searchService: RestaurantSearchService? = nil
+        searchService: RestaurantSearchService? = nil,
+        ratingStore: RatingStore? = nil
     ) {
         self.locationManager = locationManager ?? LocationManager()
         self.searchService = searchService ?? RestaurantSearchService()
+        self.ratingStore = ratingStore ?? RatingStore()
     }
 
     /// Creates a new RestaurantViewModel with pre-loaded restaurants (for testing/previews).
     ///
-    /// - Parameter restaurants: Pre-loaded list of restaurants.
+    /// - Parameters:
+    ///   - restaurants: Pre-loaded list of restaurants.
+    ///   - ratingStore: Store for user ratings. Defaults to a new instance.
     @MainActor
-    init(restaurants: [Restaurant]) {
+    init(restaurants: [Restaurant], ratingStore: RatingStore? = nil) {
         self.locationManager = LocationManager()
         self.searchService = RestaurantSearchService()
+        self.ratingStore = ratingStore ?? RatingStore()
         self.restaurants = restaurants
         self.filteredRestaurants = restaurants
     }
@@ -152,14 +167,21 @@ final class RestaurantViewModel: ObservableObject {
 
     /// Selects a random restaurant from the filtered list.
     ///
-    /// Updates `selectedRestaurant` with a randomly chosen restaurant
-    /// and sets `showSelectedRestaurant` to true to display the result.
+    /// When no rating filter is active (`minimumRating == nil`), restaurants
+    /// are weighted by their user rating using a quadratic scale:
+    /// 1★=0.25, 2★=0.5, 3★=1.0, 4★=2.0, 5★=4.0, unrated=1.0.
+    /// When a rating filter is active, selection is uniform.
     func selectRandomRestaurant() {
         guard !filteredRestaurants.isEmpty else {
             errorMessage = "No restaurants available to choose from."
             return
         }
-        selectedRestaurant = filteredRestaurants.randomElement()
+
+        if minimumRating == nil {
+            selectedRestaurant = weightedRandomElement(from: filteredRestaurants)
+        } else {
+            selectedRestaurant = filteredRestaurants.randomElement()
+        }
         showSelectedRestaurant = true
     }
 
@@ -176,7 +198,7 @@ final class RestaurantViewModel: ObservableObject {
 
     // MARK: - Private Methods
 
-    /// Applies the distance, include, and exclude cuisine filters to the restaurants list.
+    /// Applies the distance, cuisine, and rating filters to the restaurants list.
     private func applyFilter() {
         var result = restaurants
 
@@ -201,7 +223,38 @@ final class RestaurantViewModel: ObservableObject {
             }
         }
 
+        // Apply minimum rating filter (pyramidal)
+        if let minRating = minimumRating {
+            result = result.filter { restaurant in
+                guard let rating = ratingStore.rating(for: restaurant) else { return false }
+                return rating >= minRating
+            }
+        }
+
         filteredRestaurants = result
+    }
+
+    /// Selects a random restaurant weighted by user rating.
+    ///
+    /// Uses the quadratic weight table from `ratingWeight(for:)`.
+    private func weightedRandomElement(from restaurants: [Restaurant]) -> Restaurant? {
+        let weights = restaurants.map { restaurant -> Double in
+            let rating = ratingStore.rating(for: restaurant)
+            return Self.ratingWeight(for: rating)
+        }
+
+        let totalWeight = weights.reduce(0, +)
+        guard totalWeight > 0 else { return restaurants.randomElement() }
+
+        var random = Double.random(in: 0 ..< totalWeight)
+        for (index, weight) in weights.enumerated() {
+            random -= weight
+            if random < 0 {
+                return restaurants[index]
+            }
+        }
+
+        return restaurants.last
     }
 }
 
@@ -216,10 +269,45 @@ extension RestaurantViewModel {
             .sorted()
     }
 
-    /// Total number of active cuisine filters (includes + excludes).
+    /// Total number of active filters (cuisine includes + excludes + rating).
     var activeCuisineFilterCount: Int {
-        selectedCuisines.count + excludedCuisines.count
+        selectedCuisines.count + excludedCuisines.count + (minimumRating != nil ? 1 : 0)
     }
+}
+
+// MARK: - Rating Weights
+
+extension RestaurantViewModel {
+    /// Quadratic weight for a given star rating.
+    ///
+    /// 3 stars is the baseline (weight 1.0). The scale is quadratic:
+    /// - 1★ → 0.25
+    /// - 2★ → 0.50
+    /// - 3★ → 1.00
+    /// - 4★ → 2.00
+    /// - 5★ → 4.00
+    /// - nil (unrated) → 1.00
+    static func ratingWeight(for rating: Int?) -> Double {
+        guard let rating else { return 1.0 }
+        switch rating {
+        case 1: return 0.25
+        case 2: return 0.50
+        case 3: return 1.00
+        case 4: return 2.00
+        case 5: return 4.00
+        default: return 1.0
+        }
+    }
+
+    /// Available rating filter options for the UI.
+    static let ratingFilterOptions: [(label: String, value: Int?)] = [
+        ("All", nil),
+        ("1+", 1),
+        ("2+", 2),
+        ("3+", 3),
+        ("4+", 4),
+        ("5", 5),
+    ]
 }
 
 // MARK: - Distance Filter Options

@@ -24,11 +24,40 @@ struct CuisineFilterView: View {
     /// Cuisines to exclude (hide these). Empty = exclude nothing.
     @Binding var excludedCuisines: Set<String>
 
+    /// Minimum star rating filter. Nil = show all.
+    @Binding var minimumRating: Int?
+
     @Environment(\.dismiss) private var dismiss
+
+    /// Available rating filter options.
+    private let ratingOptions = RestaurantViewModel.ratingFilterOptions
 
     var body: some View {
         NavigationStack {
             List {
+                // MARK: - Rating Section
+
+                Section {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(ratingOptions, id: \.label) { option in
+                                chipButton(
+                                    label: option.label,
+                                    isActive: minimumRating == option.value,
+                                    activeColor: .orange
+                                ) {
+                                    minimumRating = option.value
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                } header: {
+                    Text("Minimum Rating")
+                } footer: {
+                    Text("Filter by your personal star ratings. Unrated restaurants are hidden when a rating filter is active.")
+                }
+
                 // MARK: - Include Section
 
                 Section {
@@ -62,15 +91,16 @@ struct CuisineFilterView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("Cuisine Filters")
+            .navigationTitle("Filters")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Reset") {
                         selectedCuisines = []
                         excludedCuisines = []
+                        minimumRating = nil
                     }
-                    .disabled(selectedCuisines.isEmpty && excludedCuisines.isEmpty)
+                    .disabled(selectedCuisines.isEmpty && excludedCuisines.isEmpty && minimumRating == nil)
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -205,6 +235,7 @@ struct FlowLayout: Layout {
     CuisineFilterView(
         availableCuisines: ["Thai", "Italian", "Japanese", "Mexican", "French", "Indian", "Chinese", "Korean"],
         selectedCuisines: .constant(["Thai", "Japanese"]),
-        excludedCuisines: .constant(["Mexican"])
+        excludedCuisines: .constant(["Mexican"]),
+        minimumRating: .constant(3)
     )
 }

@@ -5,9 +5,10 @@ import SwiftUI
 /// This view composes the restaurant list, distance filter, and
 /// the decide button into a cohesive user interface.
 struct ContentView: View {
-    @StateObject private var viewModel = RestaurantViewModel()
+    @EnvironmentObject private var ratingStore: RatingStore
+    @ObservedObject var viewModel: RestaurantViewModel
 
-    /// Whether the cuisine filter sheet is presented.
+    /// Whether the filter sheet is presented.
     @State private var showCuisineFilter = false
 
     var body: some View {
@@ -69,7 +70,8 @@ struct ContentView: View {
                 CuisineFilterView(
                     availableCuisines: viewModel.availableCuisines,
                     selectedCuisines: $viewModel.selectedCuisines,
-                    excludedCuisines: $viewModel.excludedCuisines
+                    excludedCuisines: $viewModel.excludedCuisines,
+                    minimumRating: $viewModel.minimumRating
                 )
                 .presentationDetents([.medium, .large])
             }
@@ -183,5 +185,7 @@ struct ContentView: View {
 // MARK: - Preview
 
 #Preview {
-    ContentView()
+    let store = RatingStore()
+    ContentView(viewModel: RestaurantViewModel(ratingStore: store))
+        .environmentObject(store)
 }
