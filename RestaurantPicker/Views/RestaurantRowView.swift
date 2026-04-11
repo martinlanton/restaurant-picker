@@ -29,7 +29,8 @@ struct RestaurantRowView: View {
                     StarRatingView(
                         rating: ratingBinding,
                         isInteractive: false,
-                        starSize: 12
+                        starSize: 12,
+                        displayMode: .compact
                     )
                 }
             }

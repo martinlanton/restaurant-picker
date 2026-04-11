@@ -8,6 +8,7 @@ This repository implements an iOS application that helps users randomly select n
 - Display restaurants from Apple Maps within a specified radius
 - Multi-cuisine parallel search (36 cuisine-specific queries) for broader coverage
 - Filter restaurants by distance (configurable)
+- Search restaurants by name or category
 - Include or exclude cuisine types via a filter sheet
 - Tap any restaurant to view details, call, or get directions in Apple Maps
 - Random selection with visual feedback
@@ -98,6 +99,7 @@ RestaurantPicker/
 │              │  - selectedCuisines   │                       │
 │              │  - excludedCuisines   │                       │
 │              │  - minimumRating      │                       │
+│              │  - searchText         │                       │
 │              └───────────┬───────────┘                       │
 │                          │                                   │
 ├──────────────────────────┼───────────────────────────────────┤
@@ -850,8 +852,8 @@ struct Restaurant: Identifiable, Equatable {
 Understanding how distance filtering works:
 
 ```swift
-// Default radius is 5km (5000 meters)
-viewModel.filterRadius = 5000
+// Default radius is 1km (1000 meters)
+viewModel.filterRadius = 1000
 
 // Filter to show only restaurants within 1km
 viewModel.filterRadius = 1000
@@ -859,6 +861,20 @@ viewModel.filterRadius = 1000
 // Show all restaurants (no distance filter)
 viewModel.filterRadius = nil
 ```
+
+### Search Text Filtering
+
+A search bar (via SwiftUI `.searchable`) allows users to filter restaurants
+by typing. Matches case-insensitively against both restaurant name and category.
+
+```swift
+viewModel.searchText = "Pizza"    // matches "Pizza Shop"
+viewModel.searchText = "italian"  // matches restaurants with "Italian" category
+viewModel.searchText = ""         // no text filter (show all)
+```
+
+Whitespace-only input is treated as empty. The search filter combines with
+all other filters (distance, cuisine, rating).
 
 ### Cuisine Filtering
 
@@ -889,56 +905,68 @@ a restaurant must pass **all three** to appear in the list.
 
 ### User Ratings
 
-Users can rate restaurants 1–5 stars. Ratings are stored locally on device
+Users can rate restaurants 0–5 stars. Ratings are stored locally on device
 using `UserDefaults` via `RatingStore` and are never shared.
+
+- **0** = rejected (red ⊘ icon) — restaurant won't be picked randomly
+- **1–5** = star rating
+- **nil** = unrated
 
 ```swift
 let store = RatingStore()
 
-// Save a rating
-store.setRating(4, for: restaurant)
-
-// Retrieve a rating (nil if not rated)
-let rating = store.rating(for: restaurant)  // 4
-
-// Remove a rating
-store.setRating(nil, for: restaurant)
+store.setRating(4, for: restaurant)   // 4 stars
+store.setRating(0, for: restaurant)   // rejected
+store.setRating(nil, for: restaurant) // clear (unrated)
+let rating = store.rating(for: restaurant)  // Int? (nil, 0, or 1–5)
 ```
 
 Ratings are keyed by restaurant name + coordinate (not UUID) so the same
 physical restaurant retains its rating across app launches and searches.
 
-- **Row view**: 5 small read-only stars (12pt) to the right of the cuisine category
-- **Detail view**: 5 larger tappable stars (28pt) for rating interaction
-- **No rating**: stars appear greyed out
-- **Rated**: filled stars are yellow with a white stroke; empty stars have a white stroke
+#### Display Modes
+
+`StarRatingView` supports two display modes:
+
+- **Compact** (list rows): shows **either** the star rating **or** the red reject
+  icon — not both. Greyed out stars/icon when unrated.
+- **Full** (detail view): **always** shows both the 5 stars and the reject icon
+  so users can switch between them.
+
+| State   | Compact (row)          | Full (detail)                      |
+|---------|------------------------|------------------------------------|
+| Unrated | 5 greyed stars         | 5 greyed stars + greyed ⊘          |
+| 1–5★    | Yellow stars + white stroke | Yellow stars + greyed ⊘       |
+| Rejected| Red ⊘ icon             | Greyed stars + red ⊘               |
 
 #### Rating Filtering
 
 Users can filter restaurants by minimum star rating via the filter sheet.
 The filter is pyramidal — selecting "2+" shows restaurants rated 2, 3, 4, and 5.
-Unrated restaurants are hidden when a rating filter is active.
+Unrated and rejected restaurants are hidden when a star filter is active.
 
 ```swift
 viewModel.minimumRating = 3   // shows 3, 4, 5 star restaurants
+viewModel.minimumRating = -1  // shows only unrated restaurants
 viewModel.minimumRating = nil // shows all (no rating filter)
 ```
 
-Options: `All`, `1+`, `2+`, `3+`, `4+`, `5`
+Options: `All`, `Unrated`, `1+`, `2+`, `3+`, `4+`, `5`
 
 #### Weighted Random Selection
 
 When no rating filter is active, random selection is weighted by rating
 using a quadratic scale centred on 3★ = 1.0:
 
-| Rating | Weight |
-|--------|--------|
-| 1★     | 0.25   |
-| 2★     | 0.50   |
-| 3★     | 1.00   |
-| 4★     | 2.00   |
-| 5★     | 4.00   |
-| Unrated| 1.00   |
+| Rating  | Weight |
+|---------|--------|
+| Rejected (0) | 0.00 |
+| 1★      | 0.25   |
+| 2★      | 0.50   |
+| 3★      | 1.00   |
+| 4★      | 2.00   |
+| 5★      | 4.00   |
+| Unrated | 1.00   |
 
 When a rating filter **is** active, selection is uniform (equal probability).
 

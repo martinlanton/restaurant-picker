@@ -37,23 +37,25 @@ final class RatingStore: ObservableObject {
     /// Returns the user's rating for a restaurant, or nil if not rated.
     ///
     /// - Parameter restaurant: The restaurant to look up.
-    /// - Returns: An integer rating from 1 to 5, or nil.
+    /// - Returns: An integer rating from 0 to 5 (0 = rejected), or nil (unrated).
     func rating(for restaurant: Restaurant) -> Int? {
-        let value = defaults.integer(forKey: Self.key(for: restaurant))
-        return value == 0 ? nil : value
+        let key = Self.key(for: restaurant)
+        guard defaults.object(forKey: key) != nil else { return nil }
+        return defaults.integer(forKey: key)
     }
 
     /// Saves or removes a user rating for a restaurant.
     ///
-    /// Ratings are clamped to the range 1...5. Pass nil to remove the rating.
+    /// Ratings are clamped to the range 0...5. 0 means "rejected".
+    /// Pass nil to remove the rating (back to unrated).
     ///
     /// - Parameters:
-    ///   - rating: The rating (1–5) or nil to clear.
+    ///   - rating: The rating (0–5) or nil to clear.
     ///   - restaurant: The restaurant to rate.
     func setRating(_ rating: Int?, for restaurant: Restaurant) {
         let key = Self.key(for: restaurant)
         if let rating {
-            let clamped = min(max(rating, 1), 5)
+            let clamped = min(max(rating, 0), 5)
             defaults.set(clamped, forKey: key)
         } else {
             defaults.removeObject(forKey: key)

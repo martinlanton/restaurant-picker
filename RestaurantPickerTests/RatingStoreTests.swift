@@ -127,12 +127,50 @@ final class RatingStoreTests: XCTestCase {
         // Arrange
         let restaurant = makeRestaurant(name: "Thai Place", lat: 40.7128, lon: -74.0060)
 
-        // Act & Assert — ratings should be clamped to 1...5
-        store.setRating(0, for: restaurant)
-        XCTAssertEqual(store.rating(for: restaurant), 1)
+        // Act & Assert — ratings should be clamped to 0...5
+        store.setRating(-1, for: restaurant)
+        XCTAssertEqual(store.rating(for: restaurant), 0)
 
         store.setRating(6, for: restaurant)
         XCTAssertEqual(store.rating(for: restaurant), 5)
+    }
+
+    // MARK: - Rejected (0) Rating Tests
+
+    func testSaveAndRetrieveRejectedRating() {
+        // Arrange
+        let restaurant = makeRestaurant(name: "Thai Place", lat: 40.7128, lon: -74.0060)
+
+        // Act
+        store.setRating(0, for: restaurant)
+        let rating = store.rating(for: restaurant)
+
+        // Assert — 0 means rejected, distinct from nil (unrated)
+        XCTAssertEqual(rating, 0)
+    }
+
+    func testRejectedRatingIsDistinctFromUnrated() {
+        // Arrange
+        let restaurant = makeRestaurant(name: "Thai Place", lat: 40.7128, lon: -74.0060)
+
+        // Act
+        store.setRating(0, for: restaurant)
+
+        // Assert — not nil (that would mean unrated)
+        XCTAssertNotNil(store.rating(for: restaurant))
+        XCTAssertEqual(store.rating(for: restaurant), 0)
+    }
+
+    func testClearRejectedRating() {
+        // Arrange
+        let restaurant = makeRestaurant(name: "Thai Place", lat: 40.7128, lon: -74.0060)
+        store.setRating(0, for: restaurant)
+
+        // Act
+        store.setRating(nil, for: restaurant)
+
+        // Assert
+        XCTAssertNil(store.rating(for: restaurant))
     }
 
     // MARK: - Helpers

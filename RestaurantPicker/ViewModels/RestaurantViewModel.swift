@@ -39,7 +39,7 @@ final class RestaurantViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     /// Filter radius in meters. Set to nil to show all restaurants.
-    @Published var filterRadius: Double? = 5000 {
+    @Published var filterRadius: Double? = 1000 {
         didSet {
             applyFilter()
         }
@@ -62,6 +62,13 @@ final class RestaurantViewModel: ObservableObject {
     /// Minimum star rating to include. Nil means show all (no rating filter).
     /// Pyramidal: setting 2 shows restaurants rated 2, 3, 4, and 5.
     @Published var minimumRating: Int? = nil {
+        didSet {
+            applyFilter()
+        }
+    }
+
+    /// Text to filter restaurants by name or category. Empty = no text filter.
+    @Published var searchText: String = "" {
         didSet {
             applyFilter()
         }
@@ -180,6 +187,7 @@ final class RestaurantViewModel: ObservableObject {
         if minimumRating == nil {
             selectedRestaurant = weightedRandomElement(from: filteredRestaurants)
         } else {
+            // Uniform selection when any rating filter (including unrated) is active
             selectedRestaurant = filteredRestaurants.randomElement()
         }
         showSelectedRestaurant = true
@@ -223,11 +231,29 @@ final class RestaurantViewModel: ObservableObject {
             }
         }
 
-        // Apply minimum rating filter (pyramidal)
+        // Apply minimum rating filter (pyramidal) or unrated-only filter
         if let minRating = minimumRating {
+            if minRating == -1 {
+                // Unrated only — show restaurants with nil rating
+                result = result.filter { restaurant in
+                    ratingStore.rating(for: restaurant) == nil
+                }
+            } else {
+                // Pyramidal — show restaurants rated >= minRating (excludes 0/rejected and nil/unrated)
+                result = result.filter { restaurant in
+                    guard let rating = ratingStore.rating(for: restaurant) else { return false }
+                    return rating >= minRating
+                }
+            }
+        }
+
+        // Apply search text filter
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty {
+            let query = Self.normalizeForSearch(trimmed)
             result = result.filter { restaurant in
-                guard let rating = ratingStore.rating(for: restaurant) else { return false }
-                return rating >= minRating
+                Self.normalizeForSearch(restaurant.name).contains(query) ||
+                    (restaurant.category.map { Self.normalizeForSearch($0).contains(query) } ?? false)
             }
         }
 
@@ -256,6 +282,18 @@ final class RestaurantViewModel: ObservableObject {
 
         return restaurants.last
     }
+
+    /// Normalizes a string for search comparison.
+    ///
+    /// Lowercases and replaces smart/curly quotes with straight equivalents
+    /// so that keyboard-produced characters match stored restaurant names.
+    static func normalizeForSearch(_ text: String) -> String {
+        text.lowercased()
+            .replacingOccurrences(of: "\u{2018}", with: "'") // left single curly quote
+            .replacingOccurrences(of: "\u{2019}", with: "'") // right single curly quote
+            .replacingOccurrences(of: "\u{201C}", with: "\"") // left double curly quote
+            .replacingOccurrences(of: "\u{201D}", with: "\"") // right double curly quote
+    }
 }
 
 // MARK: - Cuisine Filter
@@ -281,6 +319,7 @@ extension RestaurantViewModel {
     /// Quadratic weight for a given star rating.
     ///
     /// 3 stars is the baseline (weight 1.0). The scale is quadratic:
+    /// - 0 (rejected) → 0.00
     /// - 1★ → 0.25
     /// - 2★ → 0.50
     /// - 3★ → 1.00
@@ -290,6 +329,7 @@ extension RestaurantViewModel {
     static func ratingWeight(for rating: Int?) -> Double {
         guard let rating else { return 1.0 }
         switch rating {
+        case 0: return 0.00
         case 1: return 0.25
         case 2: return 0.50
         case 3: return 1.00
@@ -300,8 +340,10 @@ extension RestaurantViewModel {
     }
 
     /// Available rating filter options for the UI.
+    /// -1 is a sentinel for "unrated only".
     static let ratingFilterOptions: [(label: String, value: Int?)] = [
         ("All", nil),
+        ("Unrated", -1),
         ("1+", 1),
         ("2+", 2),
         ("3+", 3),

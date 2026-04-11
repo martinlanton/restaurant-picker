@@ -598,17 +598,238 @@ final class RestaurantViewModelTests: XCTestCase {
 
     @MainActor
     func testRatingFilterOptions() async {
-        // Assert the static options list
+        // Assert the static options list includes Unrated
         let options = RestaurantViewModel.ratingFilterOptions
-        XCTAssertEqual(options.count, 6)
+        XCTAssertEqual(options.count, 7)
         XCTAssertEqual(options[0].label, "All")
         XCTAssertNil(options[0].value)
-        XCTAssertEqual(options[1].label, "1+")
-        XCTAssertEqual(options[1].value, 1)
-        XCTAssertEqual(options[4].label, "4+")
-        XCTAssertEqual(options[4].value, 4)
-        XCTAssertEqual(options[5].label, "5")
-        XCTAssertEqual(options[5].value, 5)
+        XCTAssertEqual(options[1].label, "Unrated")
+        XCTAssertEqual(options[1].value, -1)
+        XCTAssertEqual(options[2].label, "1+")
+        XCTAssertEqual(options[2].value, 1)
+        XCTAssertEqual(options[5].label, "4+")
+        XCTAssertEqual(options[5].value, 4)
+        XCTAssertEqual(options[6].label, "5")
+        XCTAssertEqual(options[6].value, 5)
+    }
+
+    // MARK: - Rejected (0) Rating Tests
+
+    @MainActor
+    func testRejectedRatingWeightIsZero() async {
+        // Rejected restaurants should have weight 0 — never picked randomly
+        XCTAssertEqual(RestaurantViewModel.ratingWeight(for: 0), 0.0, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testRejectedRestaurantsExcludedFromStarFilter() async {
+        // Arrange — rejected restaurants should not appear even with 1+ filter
+        let ratingStore = RatingStore(defaults: makeTestDefaults())
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
+        viewModel.filterRadius = nil
+
+        ratingStore.setRating(0, for: sampleRestaurants[0]) // Thai = rejected
+        ratingStore.setRating(3, for: sampleRestaurants[1]) // Pizza = 3 stars
+        ratingStore.setRating(5, for: sampleRestaurants[2]) // Sushi = 5 stars
+
+        // Act
+        viewModel.minimumRating = 1
+
+        // Assert — rejected (0) does NOT pass >=1 filter
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 2)
+        let names = Set(viewModel.filteredRestaurants.map(\.name))
+        XCTAssertFalse(names.contains("Thai Place"))
+    }
+
+    // MARK: - Unrated-Only Filter Tests
+
+    @MainActor
+    func testUnratedOnlyFilterShowsOnlyUnratedRestaurants() async {
+        // Arrange
+        let ratingStore = RatingStore(defaults: makeTestDefaults())
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
+        viewModel.filterRadius = nil
+
+        // Rate Thai and Pizza, leave Sushi unrated
+        ratingStore.setRating(3, for: sampleRestaurants[0])
+        ratingStore.setRating(0, for: sampleRestaurants[1]) // rejected
+
+        // Act — minimumRating = -1 means "unrated only"
+        viewModel.minimumRating = -1
+
+        // Assert — only Sushi Bar (unrated) shown
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Sushi Bar")
+    }
+
+    @MainActor
+    func testUnratedFilterExcludesRejectedRestaurants() async {
+        // Arrange — rejected (0) is NOT unrated (nil)
+        let ratingStore = RatingStore(defaults: makeTestDefaults())
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
+        viewModel.filterRadius = nil
+
+        ratingStore.setRating(0, for: sampleRestaurants[0]) // rejected
+        ratingStore.setRating(0, for: sampleRestaurants[1]) // rejected
+        // Sushi unrated (nil)
+
+        // Act
+        viewModel.minimumRating = -1
+
+        // Assert — only Sushi Bar
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Sushi Bar")
+    }
+
+    // MARK: - Search Text Filter Tests
+
+    @MainActor
+    func testSearchTextFiltersByName() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.searchText = "Pizza"
+
+        // Assert
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Pizza Shop")
+    }
+
+    @MainActor
+    func testSearchTextIsCaseInsensitive() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.searchText = "sushi"
+
+        // Assert
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Sushi Bar")
+    }
+
+    @MainActor
+    func testSearchTextPartialMatch() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.searchText = "sh"
+
+        // Assert — matches "Pizza Shop" and "Sushi Bar"
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 2)
+        let names = Set(viewModel.filteredRestaurants.map(\.name))
+        XCTAssertTrue(names.contains("Pizza Shop"))
+        XCTAssertTrue(names.contains("Sushi Bar"))
+    }
+
+    @MainActor
+    func testEmptySearchTextShowsAll() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.searchText = ""
+
+        // Assert
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 3)
+    }
+
+    @MainActor
+    func testSearchTextCombinesWithDistanceFilter() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+
+        // Act — "Bar" matches Sushi Bar (5500m), radius 3000 excludes it
+        viewModel.searchText = "Bar"
+        viewModel.filterRadius = 3000
+
+        // Assert
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 0)
+    }
+
+    @MainActor
+    func testSearchTextMatchesCategory() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.searchText = "Italian"
+
+        // Assert
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Pizza Shop")
+    }
+
+    @MainActor
+    func testWhitespaceOnlySearchTextShowsAll() async {
+        // Arrange
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
+        viewModel.filterRadius = nil
+
+        // Act
+        viewModel.searchText = "   "
+
+        // Assert
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 3)
+    }
+
+    @MainActor
+    func testSearchTextMatchesWithSmartApostrophe() async {
+        // Arrange — restaurant with a straight apostrophe in the name
+        let restaurants = [
+            Restaurant(
+                id: UUID(),
+                name: "Tad's Steakhouse",
+                coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+                distance: 500,
+                category: "American",
+                phoneNumber: nil,
+                url: nil
+            ),
+            sampleRestaurants[1],
+        ]
+        let viewModel = RestaurantViewModel(restaurants: restaurants)
+        viewModel.filterRadius = nil
+
+        // Act — type with a curly/smart right single quote (what iOS keyboard produces)
+        viewModel.searchText = "Tad\u{2019}s"
+
+        // Assert — should still match "Tad's Steakhouse"
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Tad's Steakhouse")
+    }
+
+    @MainActor
+    func testSearchTextMatchesStraightApostropheAgainstSmartQuoteName() async {
+        // Arrange — restaurant with a smart apostrophe in the name
+        let restaurants = [
+            Restaurant(
+                id: UUID(),
+                name: "Tad\u{2019}s Steakhouse",
+                coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+                distance: 500,
+                category: "American",
+                phoneNumber: nil,
+                url: nil
+            ),
+            sampleRestaurants[1],
+        ]
+        let viewModel = RestaurantViewModel(restaurants: restaurants)
+        viewModel.filterRadius = nil
+
+        // Act — type with a straight apostrophe
+        viewModel.searchText = "Tad's"
+
+        // Assert — should still match
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+        XCTAssertTrue(viewModel.filteredRestaurants.first?.name.contains("Tad") ?? false)
     }
 
     // MARK: - Test Helpers

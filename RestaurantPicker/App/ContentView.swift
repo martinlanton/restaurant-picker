@@ -83,6 +83,7 @@ struct ContentView: View {
                 }
             }
         }
+        .searchable(text: $viewModel.searchText, prompt: "Search restaurants")
         .task {
             await viewModel.fetchNearbyRestaurants()
         }
