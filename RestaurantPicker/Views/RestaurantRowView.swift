@@ -92,4 +92,3 @@ struct RestaurantRowView: View {
     .padding()
     .environmentObject(RatingStore())
 }
-

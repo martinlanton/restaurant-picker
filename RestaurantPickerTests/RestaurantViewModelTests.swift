@@ -1,6 +1,6 @@
 import CoreLocation
-import XCTest
 @testable import RestaurantPicker
+import XCTest
 
 /// Tests for RestaurantViewModel functionality.
 final class RestaurantViewModelTests: XCTestCase {
@@ -13,6 +13,7 @@ final class RestaurantViewModelTests: XCTestCase {
             coordinate: .init(latitude: 40.7128, longitude: -74.0060),
             distance: 500,
             category: "Thai",
+            cuisineTags: ["Thai"],
             phoneNumber: nil,
             url: nil
         ),
@@ -22,6 +23,7 @@ final class RestaurantViewModelTests: XCTestCase {
             coordinate: .init(latitude: 40.7200, longitude: -74.0100),
             distance: 2000,
             category: "Italian",
+            cuisineTags: ["Italian"],
             phoneNumber: nil,
             url: nil
         ),
@@ -31,6 +33,7 @@ final class RestaurantViewModelTests: XCTestCase {
             coordinate: .init(latitude: 40.7300, longitude: -74.0200),
             distance: 5500,
             category: "Japanese",
+            cuisineTags: ["Japanese"],
             phoneNumber: nil,
             url: nil
         )
@@ -39,7 +42,7 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Filter Tests
 
     @MainActor
-    func testFilteringByDistance() async {
+    func testFilteringByDistance() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
 
@@ -52,7 +55,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testFilteringWithLargerRadius() async {
+    func testFilteringWithLargerRadius() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
 
@@ -64,7 +67,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testNoFilterShowsAllRestaurants() async {
+    func testNoFilterShowsAllRestaurants() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
 
@@ -78,7 +81,7 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Random Selection Tests
 
     @MainActor
-    func testRandomSelectionReturnsRestaurant() async {
+    func testRandomSelectionReturnsRestaurant() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -92,7 +95,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testRandomSelectionFromFilteredList() async {
+    func testRandomSelectionFromFilteredList() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = 1000
@@ -106,7 +109,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testRandomSelectionWithEmptyList() async {
+    func testRandomSelectionWithEmptyList() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: [])
 
@@ -121,7 +124,7 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Clear Selection Tests
 
     @MainActor
-    func testClearSelection() async {
+    func testClearSelection() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.selectRandomRestaurant()
@@ -140,42 +143,37 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Cuisine Filter Tests
 
     @MainActor
-    func testAvailableCuisinesReturnsUniqueSortedCategories() async {
-        // Arrange
+    func testAvailableCuisinesIsStaticAndSorted() {
+        // Arrange — availableCuisines should be the same regardless of restaurant data
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
 
         // Act
         let cuisines = viewModel.availableCuisines
 
-        // Assert
-        XCTAssertEqual(cuisines, ["Italian", "Japanese", "Thai"])
+        // Assert — derived from cuisineQueries, sorted, excluding "Restaurant"
+        XCTAssertFalse(cuisines.isEmpty)
+        XCTAssertEqual(cuisines, cuisines.sorted())
+        XCTAssertFalse(cuisines.contains("Restaurant"))
+        XCTAssertTrue(cuisines.contains("Japanese"))
+        XCTAssertTrue(cuisines.contains("Italian"))
+        XCTAssertTrue(cuisines.contains("Yakiniku"))
     }
 
     @MainActor
-    func testAvailableCuisinesExcludesNilCategories() async {
-        // Arrange
-        let restaurants = sampleRestaurants + [
-            Restaurant(
-                id: UUID(),
-                name: "Unknown Place",
-                coordinate: .init(latitude: 40.7400, longitude: -74.0300),
-                distance: 600,
-                category: nil,
-                phoneNumber: nil,
-                url: nil
-            ),
-        ]
-        let viewModel = RestaurantViewModel(restaurants: restaurants)
+    func testAvailableCuisinesDoesNotDependOnRestaurantData() {
+        // Arrange — empty restaurant list should still have all cuisines
+        let viewModel = RestaurantViewModel(restaurants: [])
 
         // Act
         let cuisines = viewModel.availableCuisines
 
-        // Assert — nil categories should not appear
-        XCTAssertEqual(cuisines, ["Italian", "Japanese", "Thai"])
+        // Assert
+        XCTAssertFalse(cuisines.isEmpty)
+        XCTAssertTrue(cuisines.contains("Thai"))
     }
 
     @MainActor
-    func testFilterBySingleCuisine() async {
+    func testFilterBySingleCuisine() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -189,7 +187,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testFilterByMultipleCuisines() async {
+    func testFilterByMultipleCuisines() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -205,7 +203,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testEmptyCuisineSelectionShowsAllRestaurants() async {
+    func testEmptyCuisineSelectionShowsAllRestaurants() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -218,7 +216,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testCuisineAndDistanceFiltersCombine() async {
+    func testCuisineAndDistanceFiltersCombine() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
 
@@ -232,7 +230,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testCuisineFilterIncludesRestaurantsWithNilCategory() async {
+    func testCuisineFilterIncludesRestaurantsWithNilCategory() {
         // Arrange — a restaurant with nil category should show when no cuisine filter is active
         let restaurants = sampleRestaurants + [
             Restaurant(
@@ -243,7 +241,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 category: nil,
                 phoneNumber: nil,
                 url: nil
-            ),
+            )
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -256,7 +254,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testCuisineFilterExcludesRestaurantsWithNilCategory() async {
+    func testCuisineFilterExcludesRestaurantsWithNilCategory() {
         // Arrange
         let restaurants = sampleRestaurants + [
             Restaurant(
@@ -267,7 +265,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 category: nil,
                 phoneNumber: nil,
                 url: nil
-            ),
+            )
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -283,7 +281,7 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Exclude Cuisine Filter Tests
 
     @MainActor
-    func testExcludeSingleCuisine() async {
+    func testExcludeSingleCuisine() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -300,7 +298,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testExcludeMultipleCuisines() async {
+    func testExcludeMultipleCuisines() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -314,7 +312,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testEmptyExcludeShowsAllRestaurants() async {
+    func testEmptyExcludeShowsAllRestaurants() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -327,7 +325,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testExcludeAndIncludeCombine() async {
+    func testExcludeAndIncludeCombine() {
         // Arrange — include Thai + Japanese, exclude Japanese
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -342,7 +340,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testExcludeAndDistanceCombine() async {
+    func testExcludeAndDistanceCombine() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
 
@@ -356,7 +354,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testExcludeDoesNotAffectNilCategoryWhenNoInclude() async {
+    func testExcludeDoesNotAffectNilCategoryWhenNoInclude() {
         // Arrange — restaurant with nil category should NOT be excluded
         let restaurants = sampleRestaurants + [
             Restaurant(
@@ -367,7 +365,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 category: nil,
                 phoneNumber: nil,
                 url: nil
-            ),
+            )
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -385,7 +383,7 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Active Filter Count Tests
 
     @MainActor
-    func testActiveCuisineFilterCountWithNoFilters() async {
+    func testActiveCuisineFilterCountWithNoFilters() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
 
@@ -394,7 +392,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testActiveCuisineFilterCountWithIncludeOnly() async {
+    func testActiveCuisineFilterCountWithIncludeOnly() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
 
@@ -406,7 +404,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testActiveCuisineFilterCountWithExcludeOnly() async {
+    func testActiveCuisineFilterCountWithExcludeOnly() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
 
@@ -418,7 +416,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testActiveCuisineFilterCountWithBoth() async {
+    func testActiveCuisineFilterCountWithBoth() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
 
@@ -433,7 +431,7 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Rating Filter Tests
 
     @MainActor
-    func testMinimumRatingFilterShowsRatedRestaurantsAtOrAbove() async {
+    func testMinimumRatingFilterShowsRatedRestaurantsAtOrAbove() {
         // Arrange
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
@@ -455,7 +453,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testMinimumRatingFilterExcludesUnratedRestaurants() async {
+    func testMinimumRatingFilterExcludesUnratedRestaurants() {
         // Arrange
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
@@ -473,7 +471,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testNilMinimumRatingShowsAll() async {
+    func testNilMinimumRatingShowsAll() {
         // Arrange
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
@@ -487,7 +485,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testMinimumRatingCombinesWithDistanceFilter() async {
+    func testMinimumRatingCombinesWithDistanceFilter() {
         // Arrange
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
@@ -506,7 +504,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testActiveFilterCountIncludesRating() async {
+    func testActiveFilterCountIncludesRating() {
         // Arrange
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
@@ -522,7 +520,7 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Weighted Selection Tests
 
     @MainActor
-    func testRatingWeightValues() async {
+    func testRatingWeightValues() {
         // Assert the quadratic weight table
         XCTAssertEqual(RestaurantViewModel.ratingWeight(for: 1), 0.25, accuracy: 0.001)
         XCTAssertEqual(RestaurantViewModel.ratingWeight(for: 2), 0.50, accuracy: 0.001)
@@ -532,18 +530,18 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testRatingWeightForUnratedIsOne() async {
+    func testRatingWeightForUnratedIsOne() {
         // Unrated restaurants should have weight 1.0 (same as 3 stars)
         XCTAssertEqual(RestaurantViewModel.ratingWeight(for: nil), 1.0, accuracy: 0.001)
     }
 
     @MainActor
-    func testWeightedSelectionFavorsHigherRatings() async {
+    func testWeightedSelectionFavorsHigherRatings() {
         // Arrange — one restaurant rated 5 (weight 4), one rated 1 (weight 0.25)
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let restaurants = [
             sampleRestaurants[0], // Thai Place
-            sampleRestaurants[1], // Pizza Shop
+            sampleRestaurants[1] // Pizza Shop
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants, ratingStore: ratingStore)
         viewModel.filterRadius = nil
@@ -563,11 +561,15 @@ final class RestaurantViewModelTests: XCTestCase {
         // Assert — Pizza Shop (weight 4.0) should be picked significantly more often
         // Expected ratio: ~4:0.25 = 16:1, so Pizza should get ~94% of picks
         let pizzaCount = counts["Pizza Shop"] ?? 0
-        XCTAssertGreaterThan(pizzaCount, 800, "Pizza Shop (5 stars) should be picked >80% of the time, got \(pizzaCount)/1000")
+        XCTAssertGreaterThan(
+            pizzaCount,
+            800,
+            "Pizza Shop (5 stars) should be picked >80% of the time, got \(pizzaCount)/1000"
+        )
     }
 
     @MainActor
-    func testWeightedSelectionDisabledWhenRatingFilterActive() async {
+    func testWeightedSelectionDisabledWhenRatingFilterActive() {
         // Arrange — when minimumRating is set, selection should be uniform (no weighting)
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
@@ -597,7 +599,7 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Rating Filter Options
 
     @MainActor
-    func testRatingFilterOptions() async {
+    func testRatingFilterOptions() {
         // Assert the static options list includes Unrated
         let options = RestaurantViewModel.ratingFilterOptions
         XCTAssertEqual(options.count, 7)
@@ -616,13 +618,13 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Rejected (0) Rating Tests
 
     @MainActor
-    func testRejectedRatingWeightIsZero() async {
+    func testRejectedRatingWeightIsZero() {
         // Rejected restaurants should have weight 0 — never picked randomly
         XCTAssertEqual(RestaurantViewModel.ratingWeight(for: 0), 0.0, accuracy: 0.001)
     }
 
     @MainActor
-    func testRejectedRestaurantsExcludedFromStarFilter() async {
+    func testRejectedRestaurantsExcludedFromStarFilter() {
         // Arrange — rejected restaurants should not appear even with 1+ filter
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
@@ -644,7 +646,7 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Unrated-Only Filter Tests
 
     @MainActor
-    func testUnratedOnlyFilterShowsOnlyUnratedRestaurants() async {
+    func testUnratedOnlyFilterShowsOnlyUnratedRestaurants() {
         // Arrange
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
@@ -663,7 +665,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testUnratedFilterExcludesRejectedRestaurants() async {
+    func testUnratedFilterExcludesRejectedRestaurants() {
         // Arrange — rejected (0) is NOT unrated (nil)
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
@@ -684,7 +686,7 @@ final class RestaurantViewModelTests: XCTestCase {
     // MARK: - Search Text Filter Tests
 
     @MainActor
-    func testSearchTextFiltersByName() async {
+    func testSearchTextFiltersByName() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -698,7 +700,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testSearchTextIsCaseInsensitive() async {
+    func testSearchTextIsCaseInsensitive() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -712,7 +714,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testSearchTextPartialMatch() async {
+    func testSearchTextPartialMatch() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -728,7 +730,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testEmptySearchTextShowsAll() async {
+    func testEmptySearchTextShowsAll() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -741,7 +743,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testSearchTextCombinesWithDistanceFilter() async {
+    func testSearchTextCombinesWithDistanceFilter() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
 
@@ -754,7 +756,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testSearchTextMatchesCategory() async {
+    func testSearchTextMatchesCategory() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -768,7 +770,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testWhitespaceOnlySearchTextShowsAll() async {
+    func testWhitespaceOnlySearchTextShowsAll() {
         // Arrange
         let viewModel = RestaurantViewModel(restaurants: sampleRestaurants)
         viewModel.filterRadius = nil
@@ -781,7 +783,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testSearchTextMatchesWithSmartApostrophe() async {
+    func testSearchTextMatchesWithSmartApostrophe() {
         // Arrange — restaurant with a straight apostrophe in the name
         let restaurants = [
             Restaurant(
@@ -793,7 +795,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 phoneNumber: nil,
                 url: nil
             ),
-            sampleRestaurants[1],
+            sampleRestaurants[1]
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -807,7 +809,7 @@ final class RestaurantViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testSearchTextMatchesStraightApostropheAgainstSmartQuoteName() async {
+    func testSearchTextMatchesStraightApostropheAgainstSmartQuoteName() {
         // Arrange — restaurant with a smart apostrophe in the name
         let restaurants = [
             Restaurant(
@@ -819,7 +821,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 phoneNumber: nil,
                 url: nil
             ),
-            sampleRestaurants[1],
+            sampleRestaurants[1]
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -903,4 +905,3 @@ final class RestaurantTests: XCTestCase {
         XCTAssertEqual(restaurant1, restaurant2)
     }
 }
-

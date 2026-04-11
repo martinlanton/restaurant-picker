@@ -1,10 +1,13 @@
 import MapKit
 import SwiftUI
 
-/// A detail view displaying full restaurant information.
+/// A detail view displaying restaurant information.
 ///
-/// Shows the restaurant name, category, distance, phone number,
-/// and website, along with action buttons to call or open in Maps.
+/// Shows the restaurant name, user star rating, an "Open in Maps" button,
+/// and Apple's built-in detail card (with Tabelog ratings, hours, price, etc.).
+///
+/// The top section is fixed; Apple's detail card fills the remaining
+/// screen space and handles its own scrolling naturally.
 ///
 /// Designed to be pushed via `NavigationLink` from the restaurant list.
 struct RestaurantDetailView: View {
@@ -14,97 +17,51 @@ struct RestaurantDetailView: View {
     @EnvironmentObject private var ratingStore: RatingStore
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Header icon
-                Image(systemName: "fork.knife.circle.fill")
-                    .font(.system(size: 64))
-                    .foregroundColor(.accentColor)
-                    .padding(.top, 24)
-
+        VStack(spacing: 0) {
+            // Fixed top section
+            VStack(spacing: 12) {
                 // Restaurant name
                 Text(restaurant.name)
-                    .font(.largeTitle)
+                    .font(.title2)
                     .fontWeight(.bold)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
+                    .padding(.top, 12)
 
                 // User rating
-                VStack(spacing: 4) {
+                HStack(spacing: 8) {
                     Text("Your Rating")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     StarRatingView(
                         rating: ratingBinding,
                         isInteractive: true,
-                        starSize: 28,
+                        starSize: 22,
                         displayMode: .full
                     )
                 }
 
-                // Info section
-                VStack(spacing: 12) {
-                    if let category = restaurant.category {
-                        DetailRow(icon: "fork.knife", label: "Cuisine", value: category)
-                    }
-
-                    DetailRow(icon: "location", label: "Distance", value: restaurant.formattedDistance)
-
-                    if let phoneNumber = restaurant.phoneNumber {
-                        DetailRow(icon: "phone", label: "Phone", value: phoneNumber)
-                    }
-
-                    if let url = restaurant.url {
-                        DetailRow(icon: "globe", label: "Website", value: url.host ?? url.absoluteString)
-                    }
-                }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .cornerRadius(12)
-                .padding(.horizontal)
-
-                // Action buttons
-                VStack(spacing: 12) {
-                    if let phoneNumber = restaurant.phoneNumber {
-                        Button {
-                            callRestaurant(phoneNumber: phoneNumber)
-                        } label: {
-                            Label("Call Restaurant", systemImage: "phone.fill")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.green)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
-                        }
-                    }
-
-                    Button {
-                        openInMaps()
-                    } label: {
-                        Label("Open in Maps", systemImage: "map.fill")
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                    }
-
-                    if let url = restaurant.url {
-                        Button {
-                            UIApplication.shared.open(url)
-                        } label: {
-                            Label("Visit Website", systemImage: "safari.fill")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.orange)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
-                        }
-                    }
+                // Open in Maps button
+                Button {
+                    openInMaps()
+                } label: {
+                    Label("Open in Maps", systemImage: "map.fill")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color.accentColor)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 32)
+                .padding(.bottom, 8)
             }
+            .background(Color(.systemBackground))
+
+            Divider()
+
+            // Apple's built-in detail card — fills remaining space
+            AppleMapItemDetailView(restaurant: restaurant)
         }
         .navigationTitle("Restaurant Details")
         .navigationBarTitleDisplayMode(.inline)
@@ -112,22 +69,14 @@ struct RestaurantDetailView: View {
 
     // MARK: - Private Methods
 
-    private func callRestaurant(phoneNumber: String) {
-        let cleaned = phoneNumber.replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: "(", with: "")
-            .replacingOccurrences(of: ")", with: "")
-        if let url = URL(string: "tel://\(cleaned)") {
-            UIApplication.shared.open(url)
-        }
-    }
-
     private func openInMaps() {
         let placemark = MKPlacemark(coordinate: restaurant.coordinate)
         let mapItem = MKMapItem(placemark: placemark)
         mapItem.name = restaurant.name
+        mapItem.phoneNumber = restaurant.phoneNumber
+        mapItem.url = restaurant.url
         mapItem.openInMaps(launchOptions: [
-            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving,
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
         ])
     }
 
@@ -139,25 +88,94 @@ struct RestaurantDetailView: View {
     }
 }
 
-// MARK: - Detail Row
+// MARK: - Apple Map Item Detail
 
-/// A single row of restaurant detail information.
-private struct DetailRow: View {
-    let icon: String
-    let label: String
-    let value: String
+/// A SwiftUI view that resolves a restaurant to a full `MKMapItem` via search,
+/// then displays Apple's built-in detail card.
+struct AppleMapItemDetailView: View {
+    let restaurant: Restaurant
+
+    @State private var resolvedItem: MKMapItem?
+    @State private var isLoading = true
 
     var body: some View {
-        HStack {
-            Label(label, systemImage: icon)
-                .foregroundColor(.secondary)
-                .frame(width: 120, alignment: .leading)
-            Spacer()
-            Text(value)
-                .foregroundColor(.primary)
-                .multilineTextAlignment(.trailing)
+        Group {
+            if let item = resolvedItem {
+                MapItemDetailRepresentable(mapItem: item)
+            } else if isLoading {
+                VStack {
+                    Spacer()
+                    ProgressView("Loading details...")
+                    Spacer()
+                }
+            } else {
+                VStack {
+                    Spacer()
+                    Text("Details not available")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+            }
+        }
+        .task {
+            await resolveMapItem()
         }
     }
+
+    /// Searches for the restaurant by name near its coordinate to get
+    /// the real `MKMapItem` with full Apple metadata.
+    private func resolveMapItem() async {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = restaurant.name
+        request.region = MKCoordinateRegion(
+            center: restaurant.coordinate,
+            latitudinalMeters: 200,
+            longitudinalMeters: 200
+        )
+        request.resultTypes = .pointOfInterest
+
+        let search = MKLocalSearch(request: request)
+
+        do {
+            let response = try await search.start()
+            let target = CLLocation(
+                latitude: restaurant.coordinate.latitude,
+                longitude: restaurant.coordinate.longitude
+            )
+            resolvedItem = response.mapItems.first { item in
+                guard let name = item.name else { return false }
+                let itemLocation = CLLocation(
+                    latitude: item.placemark.coordinate.latitude,
+                    longitude: item.placemark.coordinate.longitude
+                )
+                return name.lowercased() == restaurant.name.lowercased() &&
+                    target.distance(from: itemLocation) < 100
+            } ?? response.mapItems.first
+        } catch {
+            let placemark = MKPlacemark(coordinate: restaurant.coordinate)
+            let item = MKMapItem(placemark: placemark)
+            item.name = restaurant.name
+            item.phoneNumber = restaurant.phoneNumber
+            item.url = restaurant.url
+            resolvedItem = item
+        }
+
+        isLoading = false
+    }
+}
+
+// MARK: - MKMapItemDetailViewController Wrapper
+
+/// A simple `UIViewControllerRepresentable` for `MKMapItemDetailViewController`.
+/// The controller manages its own scrolling and fills whatever space is given.
+private struct MapItemDetailRepresentable: UIViewControllerRepresentable {
+    let mapItem: MKMapItem
+
+    func makeUIViewController(context: Context) -> MKMapItemDetailViewController {
+        MKMapItemDetailViewController(mapItem: mapItem)
+    }
+
+    func updateUIViewController(_ uiViewController: MKMapItemDetailViewController, context: Context) {}
 }
 
 // MARK: - Preview

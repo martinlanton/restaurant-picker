@@ -28,14 +28,42 @@ struct Restaurant: Identifiable, Equatable {
     /// Distance from user's current location in meters.
     let distance: Double
 
-    /// Category of the restaurant (e.g., "Thai", "Italian").
+    /// Display category of the restaurant (e.g., "Thai", "Italian").
+    /// This is the most specific cuisine label found for this restaurant.
     let category: String?
+
+    /// All cuisine query labels that matched this restaurant.
+    /// Used for filtering — a restaurant found by both "restaurant" and
+    /// "yakiniku restaurant" queries will have tags ["Restaurant", "Yakiniku"].
+    let cuisineTags: Set<String>
 
     /// Phone number if available.
     let phoneNumber: String?
 
     /// URL for more information.
     let url: URL?
+
+    // MARK: - Initialization
+
+    init(
+        id: UUID,
+        name: String,
+        coordinate: CLLocationCoordinate2D,
+        distance: Double,
+        category: String?,
+        cuisineTags: Set<String> = [],
+        phoneNumber: String?,
+        url: URL?
+    ) {
+        self.id = id
+        self.name = name
+        self.coordinate = coordinate
+        self.distance = distance
+        self.category = category
+        self.cuisineTags = cuisineTags
+        self.phoneNumber = phoneNumber
+        self.url = url
+    }
 
     // MARK: - Equatable
 

@@ -36,4 +36,3 @@ extension Optional where Wrapped == Double {
         return value.formattedAsDistance
     }
 }
-

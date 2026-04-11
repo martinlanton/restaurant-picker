@@ -137,4 +137,3 @@ struct SelectedRestaurantView: View {
         onDismiss: {}
     )
 }
-

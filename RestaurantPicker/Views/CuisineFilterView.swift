@@ -55,7 +55,9 @@ struct CuisineFilterView: View {
                 } header: {
                     Text("Minimum Rating")
                 } footer: {
-                    Text("Filter by your personal star ratings. Unrated restaurants are hidden when a rating filter is active.")
+                    Text(
+                        "Filter by your personal star ratings. Unrated restaurants are hidden when a rating filter is active."
+                    )
                 }
 
                 // MARK: - Include Section

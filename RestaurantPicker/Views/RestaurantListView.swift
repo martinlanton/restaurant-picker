@@ -60,4 +60,3 @@ struct RestaurantListView: View {
         selectedRestaurant: nil
     )
 }
-

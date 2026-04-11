@@ -1,6 +1,6 @@
 import CoreLocation
-import XCTest
 @testable import RestaurantPicker
+import XCTest
 
 /// Tests for RatingStore persistence functionality.
 final class RatingStoreTests: XCTestCase {

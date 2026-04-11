@@ -26,9 +26,11 @@ struct ContentView: View {
                 // Restaurant count
                 if !viewModel.isLoading, viewModel.errorMessage == nil {
                     HStack {
-                        Text("\(viewModel.filteredRestaurants.count) restaurant\(viewModel.filteredRestaurants.count == 1 ? "" : "s")")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        Text(
+                            "\(viewModel.filteredRestaurants.count) restaurant\(viewModel.filteredRestaurants.count == 1 ? "" : "s")"
+                        )
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                         Spacer()
                     }
                     .padding(.horizontal)

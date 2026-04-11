@@ -49,6 +49,11 @@ final class RestaurantViewModel: ObservableObject {
     @Published var selectedCuisines: Set<String> = [] {
         didSet {
             applyFilter()
+            // Trigger a targeted re-search for selected cuisines to find
+            // restaurants that may not have appeared in the initial broad search
+            if !selectedCuisines.isEmpty {
+                Task { await fetchCuisineSpecific(selectedCuisines) }
+            }
         }
     }
 
@@ -61,7 +66,7 @@ final class RestaurantViewModel: ObservableObject {
 
     /// Minimum star rating to include. Nil means show all (no rating filter).
     /// Pyramidal: setting 2 shows restaurants rated 2, 3, 4, and 5.
-    @Published var minimumRating: Int? = nil {
+    @Published var minimumRating: Int? {
         didSet {
             applyFilter()
         }
@@ -109,11 +114,11 @@ final class RestaurantViewModel: ObservableObject {
     ///   - ratingStore: Store for user ratings. Defaults to a new instance.
     @MainActor
     init(restaurants: [Restaurant], ratingStore: RatingStore? = nil) {
-        self.locationManager = LocationManager()
-        self.searchService = RestaurantSearchService()
+        locationManager = LocationManager()
+        searchService = RestaurantSearchService()
         self.ratingStore = ratingStore ?? RatingStore()
         self.restaurants = restaurants
-        self.filteredRestaurants = restaurants
+        filteredRestaurants = restaurants
     }
 
     // MARK: - Public Methods
@@ -172,6 +177,67 @@ final class RestaurantViewModel: ObservableObject {
         isLoading = false
     }
 
+    /// Performs a targeted search for specific cuisines and merges results
+    /// into the main restaurant list. Called when cuisine filters change.
+    ///
+    /// For restaurants already in the list, merges cuisine tags and upgrades
+    /// the display category. For new restaurants, appends them.
+    private func fetchCuisineSpecific(_ cuisines: Set<String>) async {
+        guard let location = locationManager.currentLocation else { return }
+
+        let results = await searchService.searchCuisines(cuisines, near: location, radius: 10000)
+        guard !results.isEmpty else { return }
+
+        var merged = restaurants
+        var changed = false
+
+        for restaurant in results {
+            let key = restaurant.name.lowercased()
+            if let existingIndex = merged.firstIndex(where: { existing in
+                existing.name.lowercased() == key &&
+                    abs(existing.coordinate.latitude - restaurant.coordinate.latitude) < 0.0005 &&
+                    abs(existing.coordinate.longitude - restaurant.coordinate.longitude) < 0.0005
+            }) {
+                // Already in the list — merge cuisine tags
+                let existing = merged[existingIndex]
+                let mergedTags = existing.cuisineTags.union(restaurant.cuisineTags)
+
+                // Upgrade display category if new one is more specific
+                let displayCategory: String?
+                if let newCat = restaurant.category,
+                   !RestaurantSearchService.genericCategories.contains(newCat),
+                   RestaurantSearchService.genericCategories.contains(existing.category ?? "") {
+                    displayCategory = newCat
+                } else {
+                    displayCategory = existing.category
+                }
+
+                if mergedTags != existing.cuisineTags || displayCategory != existing.category {
+                    merged[existingIndex] = Restaurant(
+                        id: existing.id,
+                        name: existing.name,
+                        coordinate: existing.coordinate,
+                        distance: existing.distance,
+                        category: displayCategory,
+                        cuisineTags: mergedTags,
+                        phoneNumber: existing.phoneNumber ?? restaurant.phoneNumber,
+                        url: existing.url ?? restaurant.url
+                    )
+                    changed = true
+                }
+            } else {
+                // New restaurant — append
+                merged.append(restaurant)
+                changed = true
+            }
+        }
+
+        if changed {
+            restaurants = merged.sorted { $0.distance < $1.distance }
+            applyFilter()
+        }
+    }
+
     /// Selects a random restaurant from the filtered list.
     ///
     /// When no rating filter is active (`minimumRating == nil`), restaurants
@@ -215,19 +281,17 @@ final class RestaurantViewModel: ObservableObject {
             result = result.filter { $0.distance <= radius }
         }
 
-        // Apply include cuisine filter
+        // Apply include cuisine filter (matches against cuisineTags)
         if !selectedCuisines.isEmpty {
             result = result.filter { restaurant in
-                guard let category = restaurant.category else { return false }
-                return selectedCuisines.contains(category)
+                !restaurant.cuisineTags.isDisjoint(with: selectedCuisines)
             }
         }
 
-        // Apply exclude cuisine filter
+        // Apply exclude cuisine filter (matches against cuisineTags)
         if !excludedCuisines.isEmpty {
             result = result.filter { restaurant in
-                guard let category = restaurant.category else { return true }
-                return !excludedCuisines.contains(category)
+                restaurant.cuisineTags.isDisjoint(with: excludedCuisines)
             }
         }
 
@@ -299,12 +363,20 @@ final class RestaurantViewModel: ObservableObject {
 // MARK: - Cuisine Filter
 
 extension RestaurantViewModel {
-    /// Unique, sorted list of cuisine categories available in the current restaurant set.
+    /// Static list of cuisine categories available for filtering.
+    ///
+    /// Derived from the search service's cuisine queries. This ensures
+    /// filter options are always present regardless of which restaurants
+    /// were discovered in the current search.
+    static let allCuisines: [String] = RestaurantSearchService.cuisineQueries
+        .map(\.label)
+        .filter { !RestaurantSearchService.genericCategories.contains($0) }
+        .sorted()
+
+    /// Unique, sorted list of cuisine categories available for filtering.
+    /// Uses the static list so filters never disappear.
     var availableCuisines: [String] {
-        restaurants
-            .compactMap(\.category)
-            .reduce(into: Set<String>()) { $0.insert($1) }
-            .sorted()
+        Self.allCuisines
     }
 
     /// Total number of active filters (cuisine includes + excludes + rating).
@@ -348,7 +420,7 @@ extension RestaurantViewModel {
         ("2+", 2),
         ("3+", 3),
         ("4+", 4),
-        ("5", 5),
+        ("5", 5)
     ]
 }
 
@@ -365,4 +437,3 @@ extension RestaurantViewModel {
         ("All", nil)
     ]
 }
-

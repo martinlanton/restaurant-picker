@@ -32,7 +32,7 @@ This repository implements an iOS application that helps users randomly select n
 
 - **Language**: Swift 5.9+
 - **UI Framework**: SwiftUI
-- **Minimum iOS**: iOS 17.0+
+- **Minimum iOS**: iOS 18.0+
 - **IDE**: Xcode 16+
 - **Architecture**: MVVM (Model-View-ViewModel)
 - **Maps**: Apple MapKit (parallel multi-cuisine MKLocalSearch for restaurant discovery)
@@ -879,12 +879,20 @@ all other filters (distance, cuisine, rating).
 ### Cuisine Filtering
 
 Users can filter by including or excluding cuisine types. The available cuisines
-are derived dynamically from the fetched restaurant categories. Both filters are
-accessed through a filter icon in the navigation bar that opens a sheet.
+are a **static list** derived from `RestaurantSearchService.cuisineQueries` labels
+(excluding the generic "Restaurant" catch-all). This ensures filter options are
+always present regardless of which restaurants were discovered in the current search.
+
+Cuisine filtering uses `Restaurant.cuisineTags` (a `Set<String>`) rather than
+the single `category` display field. Each restaurant accumulates tags from every
+cuisine query that found it — e.g. a restaurant found by both the "restaurant"
+and "yakiniku restaurant" queries has `cuisineTags: ["Restaurant", "Yakiniku"]`.
+The `category` field holds the most specific label for display purposes only.
 
 ```swift
-// Available cuisines (computed from current restaurants)
-viewModel.availableCuisines  // e.g., ["Italian", "Japanese", "Thai"]
+// Available cuisines (static, always the same)
+RestaurantViewModel.allCuisines  // ["African", "American", ..., "Yakiniku", "Yoshoku"]
+viewModel.availableCuisines      // same static list
 
 // Include filter — show only these cuisines (empty = show all)
 viewModel.selectedCuisines = ["Thai"]
@@ -902,6 +910,14 @@ viewModel.activeCuisineFilterCount  // selectedCuisines.count + excludedCuisines
 A cuisine cannot be both included and excluded — toggling one automatically
 removes it from the other. Distance, include, and exclude filters all combine —
 a restaurant must pass **all three** to appear in the list.
+
+When an include cuisine filter is applied, the app automatically re-runs
+**targeted searches** for those specific cuisines via `searchCuisines(_:near:radius:)`,
+then merges any newly discovered restaurants into the main list. This overcomes
+the ~25 result-per-query limit of `MKLocalSearch` — for example, selecting
+"Yakiniku" triggers fresh queries for `"yakiniku restaurant"`, `"yakiniku"`,
+and the predefined query, finding restaurants that may not have appeared in the
+initial broad search.
 
 ### User Ratings
 
@@ -1102,7 +1118,8 @@ struct ContentView: View {
 
 #### Navigation Flow
 - **List → Detail**: `RestaurantListView` wraps each row in a `NavigationLink`
-  that pushes `RestaurantDetailView` (shows info, call, Maps, website buttons).
+  that pushes `RestaurantDetailView` (shows name, user rating, Apple's built-in
+  detail card via `MKMapItemDetailViewController`, and Open in Maps button).
 - **Filter Icon → Sheet**: Toolbar filter icon opens `CuisineFilterView` as a
   half/full-height sheet with Include/Exclude sections and a Reset button.
 - **Random Pick → Sheet**: The "Pick a Restaurant!" button triggers

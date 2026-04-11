@@ -14,22 +14,21 @@ final class RestaurantPickerUITests: XCTestCase {
         app = nil
     }
 
-    func testDecideButtonExists() throws {
+    func testDecideButtonExists() {
         // The decide button should be visible
         let decideButton = app.buttons["Pick a Restaurant!"]
         XCTAssertTrue(decideButton.waitForExistence(timeout: 5))
     }
 
-    func testNavigationTitleDisplayed() throws {
+    func testNavigationTitleDisplayed() {
         // The navigation title should be displayed
         let navTitle = app.navigationBars["Restaurant Picker"]
         XCTAssertTrue(navTitle.waitForExistence(timeout: 5))
     }
 
-    func testDistanceFilterExists() throws {
+    func testDistanceFilterExists() {
         // Distance filter options should be visible
         let maxDistanceLabel = app.staticTexts["Max Distance"]
         XCTAssertTrue(maxDistanceLabel.waitForExistence(timeout: 5))
     }
 }
-

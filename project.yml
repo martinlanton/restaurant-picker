@@ -2,7 +2,7 @@ name: RestaurantPicker
 options:
   bundleIdPrefix: com.restaurantpicker
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "18.0"
   xcodeVersion: "16.0"
 
 settings:
@@ -14,7 +14,7 @@ targets:
   RestaurantPicker:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     sources:
       - path: RestaurantPicker
         excludes:
@@ -38,7 +38,7 @@ targets:
   RestaurantPickerTests:
     type: bundle.unit-test
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     sources:
       - RestaurantPickerTests
     dependencies:
@@ -47,7 +47,7 @@ targets:
   RestaurantPickerUITests:
     type: bundle.ui-testing
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     sources:
       - RestaurantPickerUITests
     dependencies:

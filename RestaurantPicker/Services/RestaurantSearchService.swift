@@ -25,7 +25,7 @@ actor RestaurantSearchService {
 
         var errorDescription: String? {
             switch self {
-            case .searchFailed(let error):
+            case let .searchFailed(error):
                 return "Search failed: \(error.localizedDescription)"
             case .noResults:
                 return "No restaurants found in this area."
@@ -40,7 +40,7 @@ actor RestaurantSearchService {
     /// `MKLocalSearch` returns a maximum of ~25 results per query.
     /// By searching for many cuisine types in parallel, we can discover
     /// hundreds of unique restaurants in the same area.
-    private static let cuisineQueries: [(query: String, label: String)] = [
+    static let cuisineQueries: [(query: String, label: String)] = [
         ("restaurant", "Restaurant"),
         ("chinese restaurant", "Chinese"),
         ("japanese restaurant", "Japanese"),
@@ -98,7 +98,22 @@ actor RestaurantSearchService {
         ("dim sum restaurant", "Dim Sum"),
         ("noodle restaurant", "Noodle"),
         ("dumpling restaurant", "Dumpling"),
-        ("food court", "Food Court"),
+        ("food court", "Food Court")
+    ]
+
+    // MARK: - Generic Categories
+
+    /// Labels that are too generic to be useful as cuisine types.
+    ///
+    /// These originate from `MKPointOfInterestCategory` (e.g. `.restaurant`)
+    /// and from the catch-all `"restaurant"` query. They are stripped from
+    /// `cuisineTags` and `category` during deduplication so that only
+    /// meaningful cuisine types survive.
+    ///
+    /// Note: "Café" and "Bakery" are **not** generic — they are valid
+    /// cuisine types that users can filter on.
+    static let genericCategories: Set<String> = [
+        "Restaurant", "Food Market", "Brewery", "Winery", "Nightlife"
     ]
 
     // MARK: - Public Methods
@@ -114,15 +129,22 @@ actor RestaurantSearchService {
     ///   - radius: Search radius in meters. Defaults to 5000 (5km).
     /// - Returns: Array of discovered restaurants sorted by distance.
     /// - Throws: `SearchError` if all searches fail or return no results.
-    func searchRestaurants(near location: CLLocation, radius: Double = 5000) async throws -> [Restaurant] {
+    func searchRestaurants(
+        near location: CLLocation,
+        radius: Double = 5000
+    ) async throws -> [Restaurant] {
         let region = MKCoordinateRegion(
             center: location.coordinate,
             latitudinalMeters: radius * 2,
             longitudinalMeters: radius * 2
         )
 
-        // Run all cuisine searches concurrently, plus a POI category search
-        let allResults = await withTaskGroup(of: [(Restaurant, String)].self) { group in
+        // Run all cuisine searches concurrently, plus a POI category search.
+        // Collect cuisine results and POI results separately so cuisine-specific
+        // labels take priority during deduplication.
+        let cuisineResults = await withTaskGroup(
+            of: [(Restaurant, String)].self
+        ) { group in
             for cuisine in Self.cuisineQueries {
                 group.addTask { [self] in
                     await self.performSearch(
@@ -135,14 +157,92 @@ actor RestaurantSearchService {
                 }
             }
 
-            // Supplemental: POI category-based search (no natural language)
-            // Discovers restaurants that may not match any cuisine keyword
-            group.addTask { [self] in
-                await self.performPOISearch(
-                    region: region,
-                    location: location,
-                    radius: radius
-                )
+            var combined: [(Restaurant, String)] = []
+            for await results in group {
+                combined.append(contentsOf: results)
+            }
+            return combined
+        }
+
+        // Supplemental: POI category-based search (no natural language).
+        // Discovers restaurants that may not match any cuisine keyword.
+        let poiResults = await performPOISearch(
+            region: region,
+            location: location,
+            radius: radius
+        )
+
+        // Cuisine-specific results first (sorted so specific labels come
+        // before generic ones), then POI results — dedup keeps the first
+        // occurrence, so specific labels win over generic ones.
+        let sortedCuisine = cuisineResults.sorted { lhs, rhs in
+            let lhsGeneric = Self.genericCategories.contains(lhs.1)
+            let rhsGeneric = Self.genericCategories.contains(rhs.1)
+            if lhsGeneric, !rhsGeneric { return false }
+            if !lhsGeneric, rhsGeneric { return true }
+            return false // stable order otherwise
+        }
+        let allResults = sortedCuisine + poiResults
+
+        // Deduplicate by name + proximity (within 50m)
+        let unique = Self.deduplicate(allResults)
+
+        if unique.isEmpty {
+            throw SearchError.noResults
+        }
+
+        return unique.sorted { $0.distance < $1.distance }
+    }
+
+    /// Searches for restaurants matching specific cuisine labels.
+    ///
+    /// Use this when the user applies a cuisine filter — it re-runs
+    /// targeted queries for those specific cuisines to find restaurants
+    /// that may not have appeared in the initial broad search.
+    ///
+    /// - Parameters:
+    ///   - cuisineLabels: Labels to search for (e.g. ["Yakiniku"]).
+    ///   - location: The center point for the search.
+    ///   - radius: Search radius in meters.
+    /// - Returns: Array of discovered restaurants sorted by distance.
+    func searchCuisines(
+        _ cuisineLabels: Set<String>,
+        near location: CLLocation,
+        radius: Double
+    ) async -> [Restaurant] {
+        let region = MKCoordinateRegion(
+            center: location.coordinate,
+            latitudinalMeters: radius * 2,
+            longitudinalMeters: radius * 2
+        )
+
+        var queriesToRun: [(query: String, label: String)] = []
+        for label in cuisineLabels {
+            let lowered = label.lowercased()
+            if let match = Self.cuisineQueries.first(
+                where: { $0.label.lowercased() == lowered }
+            ) {
+                queriesToRun.append(match)
+            }
+            queriesToRun.append(
+                (query: "\(label) restaurant", label: label)
+            )
+            queriesToRun.append((query: label, label: label))
+        }
+
+        let allResults = await withTaskGroup(
+            of: [(Restaurant, String)].self
+        ) { group in
+            for cuisine in queriesToRun {
+                group.addTask { [self] in
+                    await self.performSearch(
+                        query: cuisine.query,
+                        label: cuisine.label,
+                        region: region,
+                        location: location,
+                        radius: radius
+                    )
+                }
             }
 
             var combined: [(Restaurant, String)] = []
@@ -152,45 +252,106 @@ actor RestaurantSearchService {
             return combined
         }
 
-        // Deduplicate by name + proximity (within 50m)
-        // Same-name restaurants at different locations (chains) are kept.
+        return Self.deduplicate(allResults)
+            .sorted { $0.distance < $1.distance }
+    }
+
+    // MARK: - Deduplication
+
+    /// Deduplicates restaurant results by name + proximity (within 50m).
+    ///
+    /// Same-name restaurants at different locations (chains) are kept.
+    /// Generic labels (e.g. "Restaurant") are stripped from both the
+    /// display `category` and `cuisineTags` so that only meaningful
+    /// cuisine types remain.
+    private static func deduplicate(
+        _ results: [(Restaurant, String)]
+    ) -> [Restaurant] {
         var unique: [Restaurant] = []
 
-        for (restaurant, label) in allResults {
+        for (restaurant, label) in results {
+            let isGenericLabel = genericCategories.contains(label)
             let key = restaurant.name.lowercased()
-            let isDuplicate = unique.contains { existing in
-                existing.name.lowercased() == key &&
-                    abs(existing.coordinate.latitude - restaurant.coordinate.latitude) < 0.0005 &&
-                    abs(existing.coordinate.longitude - restaurant.coordinate.longitude) < 0.0005
-            }
-            if isDuplicate {
+
+            if let idx = unique.firstIndex(where: { existing in
+                existing.name.lowercased() == key
+                    && abs(
+                        existing.coordinate.latitude
+                            - restaurant.coordinate.latitude
+                    ) < 0.0005
+                    && abs(
+                        existing.coordinate.longitude
+                            - restaurant.coordinate.longitude
+                    ) < 0.0005
+            }) {
+                // Duplicate — merge tag and maybe upgrade category
+                let existing = unique[idx]
+                var mergedTags = existing.cuisineTags
+                if !isGenericLabel {
+                    mergedTags.insert(label)
+                }
+
+                let newCategory: String?
+                if !isGenericLabel {
+                    // Incoming label is specific — upgrade if needed
+                    if existing.category == nil
+                        || genericCategories.contains(
+                            existing.category ?? ""
+                        ) {
+                        newCategory = label
+                    } else {
+                        newCategory = existing.category
+                    }
+                } else {
+                    newCategory = existing.category
+                }
+
+                unique[idx] = Restaurant(
+                    id: existing.id,
+                    name: existing.name,
+                    coordinate: existing.coordinate,
+                    distance: existing.distance,
+                    category: newCategory,
+                    cuisineTags: mergedTags,
+                    phoneNumber: existing.phoneNumber
+                        ?? restaurant.phoneNumber,
+                    url: existing.url ?? restaurant.url
+                )
                 continue
             }
 
-            // Use the cuisine label if it came from a specific query, otherwise fallback
-            let category = label == "Restaurant" ? restaurant.category : label
+            // New restaurant
+            let category: String? = isGenericLabel ? nil : label
+            var tags: Set<String> = []
+            if !isGenericLabel {
+                tags.insert(label)
+            }
+            // Also include the POI displayName if it is not generic
+            if let cat = restaurant.category,
+               !genericCategories.contains(cat) {
+                tags.insert(cat)
+            }
+
             let categorized = Restaurant(
                 id: restaurant.id,
                 name: restaurant.name,
                 coordinate: restaurant.coordinate,
                 distance: restaurant.distance,
                 category: category,
+                cuisineTags: tags,
                 phoneNumber: restaurant.phoneNumber,
                 url: restaurant.url
             )
             unique.append(categorized)
         }
 
-        if unique.isEmpty {
-            throw SearchError.noResults
-        }
-
-        return unique.sorted { $0.distance < $1.distance }
+        return unique
     }
 
-    // MARK: - Private Methods
+    // MARK: - Search Helpers
 
-    /// Performs a single MKLocalSearch query and returns the results.
+    /// Performs a single `MKLocalSearch` query and returns results
+    /// paired with the cuisine label that triggered the search.
     private func performSearch(
         query: String,
         label: String,
@@ -208,84 +369,111 @@ actor RestaurantSearchService {
         do {
             let response = try await search.start()
 
-            return response.mapItems.compactMap { item -> (Restaurant, String)? in
+            return response.mapItems.compactMap { item in
                 guard let name = item.name else { return nil }
 
-                let itemLocation = CLLocation(
+                let itemLoc = CLLocation(
                     latitude: item.placemark.coordinate.latitude,
                     longitude: item.placemark.coordinate.longitude
                 )
-                let distance = location.distance(from: itemLocation)
-
+                let distance = location.distance(from: itemLoc)
                 guard distance <= radius else { return nil }
 
-                let displayCategory = Self.displayName(for: item.pointOfInterestCategory)
-
+                let displayCat = Self.displayName(
+                    for: item.pointOfInterestCategory
+                )
                 let restaurant = Restaurant(
                     id: UUID(),
                     name: name,
                     coordinate: item.placemark.coordinate,
                     distance: distance,
-                    category: displayCategory,
+                    category: displayCat,
                     phoneNumber: item.phoneNumber,
                     url: item.url
                 )
                 return (restaurant, label)
             }
         } catch {
-            // Individual query failures are non-fatal; other queries may succeed.
             return []
         }
     }
 
     /// Performs a POI category-based search for restaurants.
     ///
-    /// Uses `MKLocalPointsOfInterestRequest` with a `.restaurant` filter
-    /// to discover restaurants that may not match natural language queries.
+    /// Uses `MKLocalPointsOfInterestRequest` with `.restaurant`, `.cafe`,
+    /// and `.bakery` filters. Each result's label is derived from its
+    /// actual POI category so cafés and bakeries get proper tags.
     private func performPOISearch(
         region: MKCoordinateRegion,
         location: CLLocation,
         radius: Double
     ) async -> [(Restaurant, String)] {
-        let request = MKLocalPointsOfInterestRequest(coordinateRegion: region)
-        request.pointOfInterestFilter = MKPointOfInterestFilter(including: [.restaurant, .cafe, .bakery])
+        let request = MKLocalPointsOfInterestRequest(
+            coordinateRegion: region
+        )
+        request.pointOfInterestFilter = MKPointOfInterestFilter(
+            including: [.restaurant, .cafe, .bakery]
+        )
 
         let search = MKLocalSearch(request: request)
 
         do {
             let response = try await search.start()
 
-            return response.mapItems.compactMap { item -> (Restaurant, String)? in
+            return response.mapItems.compactMap { item in
                 guard let name = item.name else { return nil }
 
-                let itemLocation = CLLocation(
+                let itemLoc = CLLocation(
                     latitude: item.placemark.coordinate.latitude,
                     longitude: item.placemark.coordinate.longitude
                 )
-                let distance = location.distance(from: itemLocation)
-
+                let distance = location.distance(from: itemLoc)
                 guard distance <= radius else { return nil }
 
-                let displayCategory = Self.displayName(for: item.pointOfInterestCategory)
-
+                let label = Self.poiCategoryLabel(
+                    for: item.pointOfInterestCategory
+                )
+                let displayCat = Self.displayName(
+                    for: item.pointOfInterestCategory
+                )
                 let restaurant = Restaurant(
                     id: UUID(),
                     name: name,
                     coordinate: item.placemark.coordinate,
                     distance: distance,
-                    category: displayCategory,
+                    category: displayCat,
                     phoneNumber: item.phoneNumber,
                     url: item.url
                 )
-                return (restaurant, "Restaurant")
+                return (restaurant, label)
             }
         } catch {
             return []
         }
     }
 
-    /// Converts an `MKPointOfInterestCategory` to a human-readable display name.
-    private static func displayName(for category: MKPointOfInterestCategory?) -> String? {
+    // MARK: - Category Helpers
+
+    /// Maps a POI category to the corresponding cuisine query label.
+    ///
+    /// Cafés and bakeries get their specific label; everything else
+    /// gets the generic `"Restaurant"` (which will be stripped during
+    /// deduplication).
+    private static func poiCategoryLabel(
+        for category: MKPointOfInterestCategory?
+    ) -> String {
+        guard let category else { return "Restaurant" }
+        switch category {
+        case .cafe: return "Café"
+        case .bakery: return "Bakery"
+        default: return "Restaurant"
+        }
+    }
+
+    /// Converts an `MKPointOfInterestCategory` to a human-readable name.
+    private static func displayName(
+        for category: MKPointOfInterestCategory?
+    ) -> String? {
         guard let category else { return nil }
 
         switch category {
@@ -299,7 +487,9 @@ actor RestaurantSearchService {
         default:
             let raw = category.rawValue
             if raw.hasPrefix("MKPOICategory") {
-                let stripped = String(raw.dropFirst("MKPOICategory".count))
+                let stripped = String(
+                    raw.dropFirst("MKPOICategory".count)
+                )
                 return stripped.replacingOccurrences(
                     of: "([a-z])([A-Z])",
                     with: "$1 $2",
