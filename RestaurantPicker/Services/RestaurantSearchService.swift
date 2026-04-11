@@ -46,12 +46,30 @@ actor RestaurantSearchService {
         ("japanese restaurant", "Japanese"),
         ("sushi restaurant", "Sushi"),
         ("ramen restaurant", "Ramen"),
+        ("udon restaurant", "Udon"),
+        ("soba restaurant", "Soba"),
+        ("tempura restaurant", "Tempura"),
+        ("tonkatsu restaurant", "Tonkatsu"),
+        ("yakiniku restaurant", "Yakiniku"),
+        ("izakaya", "Izakaya"),
+        ("washoku restaurant", "Washoku"),
+        ("okonomiyaki restaurant", "Okonomiyaki"),
+        ("takoyaki restaurant", "Takoyaki"),
+        ("curry restaurant", "Curry"),
+        ("gyudon restaurant", "Gyudon"),
+        ("donburi restaurant", "Donburi"),
+        ("teppanyaki restaurant", "Teppanyaki"),
+        ("kaiseki restaurant", "Kaiseki"),
+        ("kushikatsu restaurant", "Kushikatsu"),
+        ("yoshoku restaurant", "Yoshoku"),
+        ("family restaurant", "Family Restaurant"),
         ("korean restaurant", "Korean"),
         ("thai restaurant", "Thai"),
         ("vietnamese restaurant", "Vietnamese"),
         ("indian restaurant", "Indian"),
         ("italian restaurant", "Italian"),
         ("pizza restaurant", "Pizza"),
+        ("pasta restaurant", "Pasta"),
         ("mexican restaurant", "Mexican"),
         ("french restaurant", "French"),
         ("mediterranean restaurant", "Mediterranean"),
@@ -77,6 +95,10 @@ actor RestaurantSearchService {
         ("caribbean restaurant", "Caribbean"),
         ("middle eastern restaurant", "Middle Eastern"),
         ("african restaurant", "African"),
+        ("dim sum restaurant", "Dim Sum"),
+        ("noodle restaurant", "Noodle"),
+        ("dumpling restaurant", "Dumpling"),
+        ("food court", "Food Court"),
     ]
 
     // MARK: - Public Methods
@@ -99,7 +121,7 @@ actor RestaurantSearchService {
             longitudinalMeters: radius * 2
         )
 
-        // Run all cuisine searches concurrently
+        // Run all cuisine searches concurrently, plus a POI category search
         let allResults = await withTaskGroup(of: [(Restaurant, String)].self) { group in
             for cuisine in Self.cuisineQueries {
                 group.addTask { [self] in
@@ -113,6 +135,16 @@ actor RestaurantSearchService {
                 }
             }
 
+            // Supplemental: POI category-based search (no natural language)
+            // Discovers restaurants that may not match any cuisine keyword
+            group.addTask { [self] in
+                await self.performPOISearch(
+                    region: region,
+                    location: location,
+                    radius: radius
+                )
+            }
+
             var combined: [(Restaurant, String)] = []
             for await results in group {
                 combined.append(contentsOf: results)
@@ -121,14 +153,11 @@ actor RestaurantSearchService {
         }
 
         // Deduplicate by name + proximity (within 50m)
+        // Same-name restaurants at different locations (chains) are kept.
         var unique: [Restaurant] = []
-        var seen: Set<String> = []
 
         for (restaurant, label) in allResults {
             let key = restaurant.name.lowercased()
-            if seen.contains(key) {
-                continue
-            }
             let isDuplicate = unique.contains { existing in
                 existing.name.lowercased() == key &&
                     abs(existing.coordinate.latitude - restaurant.coordinate.latitude) < 0.0005 &&
@@ -150,7 +179,6 @@ actor RestaurantSearchService {
                 url: restaurant.url
             )
             unique.append(categorized)
-            seen.insert(key)
         }
 
         if unique.isEmpty {
@@ -173,6 +201,7 @@ actor RestaurantSearchService {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
         request.region = region
+        request.resultTypes = .pointOfInterest
 
         let search = MKLocalSearch(request: request)
 
@@ -205,6 +234,52 @@ actor RestaurantSearchService {
             }
         } catch {
             // Individual query failures are non-fatal; other queries may succeed.
+            return []
+        }
+    }
+
+    /// Performs a POI category-based search for restaurants.
+    ///
+    /// Uses `MKLocalPointsOfInterestRequest` with a `.restaurant` filter
+    /// to discover restaurants that may not match natural language queries.
+    private func performPOISearch(
+        region: MKCoordinateRegion,
+        location: CLLocation,
+        radius: Double
+    ) async -> [(Restaurant, String)] {
+        let request = MKLocalPointsOfInterestRequest(coordinateRegion: region)
+        request.pointOfInterestFilter = MKPointOfInterestFilter(including: [.restaurant, .cafe, .bakery])
+
+        let search = MKLocalSearch(request: request)
+
+        do {
+            let response = try await search.start()
+
+            return response.mapItems.compactMap { item -> (Restaurant, String)? in
+                guard let name = item.name else { return nil }
+
+                let itemLocation = CLLocation(
+                    latitude: item.placemark.coordinate.latitude,
+                    longitude: item.placemark.coordinate.longitude
+                )
+                let distance = location.distance(from: itemLocation)
+
+                guard distance <= radius else { return nil }
+
+                let displayCategory = Self.displayName(for: item.pointOfInterestCategory)
+
+                let restaurant = Restaurant(
+                    id: UUID(),
+                    name: name,
+                    coordinate: item.placemark.coordinate,
+                    distance: distance,
+                    category: displayCategory,
+                    phoneNumber: item.phoneNumber,
+                    url: item.url
+                )
+                return (restaurant, "Restaurant")
+            }
+        } catch {
             return []
         }
     }
