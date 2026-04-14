@@ -1,3 +1,60 @@
+# Implementation Log: Focused-Region Search + 3-Phase Architecture
+
+**Date**: 2026-04-14
+**Author**: GitHub Copilot
+
+## Overview
+
+Restaurant discovery was limited because the initial MKLocalSearch queries
+used a 10km region while scatter only probed ~1km. MKLocalSearch returns
+the 25 "most relevant" results biased towards the region centre, so the
+scatter's 1km sub-regions returned mostly the same restaurants as the
+original 10km query. Fixed by using the user's filter radius as the search
+region for BOTH initial queries and scatter.
+
+## Root Cause
+
+- Initial queries: region = 10km × 10km. MapKit returns 25 results from this
+  huge area, biased to the centre.
+- Scatter: fires from 500m offsets (for 1km filter) with 500m × 500m sub-regions.
+  These tiny regions are subsets of the original 10km region, so MapKit often
+  returns the same top-25 restaurants — scatter barely found new ones.
+- Additionally, scatter running inline between batches (prior fix moved it after)
+  was exhausting rate limits, causing batches 2–10 to return nothing.
+
+## Changes
+
+### RestaurantSearchService.swift
+
+1. **Renamed `scatterRadius` → `focusRadius`** to reflect that it now controls
+   both the initial query region AND the scatter radius.
+
+2. **3-phase search architecture**:
+   - **Phase 1 (Focused)**: All 150+ queries use `focusedRegion` (filter-radius-
+     sized). In a 1km filter, the search region is 2km × 2km. MapKit's 25-result
+     cap now applies to this small area, making saturation detection accurate.
+   - **Phase 2 (Scatter)**: Saturated queries from Phase 1 trigger adaptive
+     scatter within the same focus radius. Since both the initial query and
+     scatter use the same region scale, scatter genuinely discovers new
+     restaurants in adjacent sub-regions.
+   - **Phase 3 (Wide)**: All queries re-run with the full 10km region to
+     pre-cache distant restaurants for when the user widens the filter.
+     Only runs if `focusRadius < radius`.
+
+3. **POI search uses wide region** — the category-based POI search always
+   uses the full 10km region since it's a single query and doesn't suffer
+   from the 25-result bias as much.
+
+### RestaurantViewModel.swift
+
+4. **`focusRadius` parameter** — passes `filterRadius ?? 500` as `focusRadius`.
+
+## Testing
+
+All 66 tests pass. Build succeeded. SwiftFormat + SwiftLint clean.
+
+---
+
 # Implementation Log: Search Caching, Cancellation & Scatter Radius Fix
 
 **Date**: 2026-04-14

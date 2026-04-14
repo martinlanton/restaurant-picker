@@ -273,11 +273,11 @@ final class RestaurantViewModel: ObservableObject {
     /// default) so adaptive scatter concentrates on the area being viewed.
     /// The network search radius (10km) is used as the maxRadius distance filter.
     private func runProgressiveSearch(location: CLLocation, radius: Double) async {
-        let scatterRadius = filterRadius ?? 500
+        let focusRadius = filterRadius ?? 500
         let stream = await searchService.searchRestaurants(
             near: location,
             radius: radius,
-            scatterRadius: scatterRadius
+            focusRadius: focusRadius
         )
         var receivedAny = false
 

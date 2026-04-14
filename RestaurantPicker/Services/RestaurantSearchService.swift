@@ -304,27 +304,36 @@ actor RestaurantSearchService {
 
     /// Searches for restaurants near a location, yielding results progressively.
     ///
-    /// Returns an `AsyncThrowingStream` that yields an accumulated, deduplicated
-    /// restaurant snapshot after each batch completes. The POI category search
-    /// runs concurrently alongside the first cuisine batch so its results appear
-    /// early. The stream finishes after all batches complete.
+    /// Runs in two phases:
+    /// 1. **Focused phase**: All cuisine queries use a region sized to `focusRadius`
+    ///    (the user's filter radius). Saturated queries trigger adaptive scatter
+    ///    within this radius. This maximizes coverage in the area the user is viewing.
+    /// 2. **Wide phase**: Priority-1 queries re-run with the full `radius` region
+    ///    to discover distant restaurants for when the user widens the filter.
+    ///
+    /// Both phases yield progressively into the same stream.
     ///
     /// - Parameters:
     ///   - location: The center point for the search.
-    ///   - radius: Search radius in meters. Defaults to 5000 (5km).
-    ///     This is the maximum distance filter applied to individual results.
-    ///   - scatterRadius: The radius used for adaptive scatter depth-0 nodes.
-    ///     Defaults to `radius`. Pass the user's filter radius (e.g. 500m) to
-    ///     concentrate scatter in the area the user is actually viewing.
-    ///     Depth progression: scatterRadius → /2 → /4 → /8.
+    ///   - radius: Maximum distance filter in meters. Defaults to 5000 (5km).
+    ///   - focusRadius: Region radius for initial queries + scatter depth-0.
+    ///     Defaults to `radius`. Pass the user's filter radius (e.g. 1000m) to
+    ///     concentrate discovery in the area being viewed.
     /// - Returns: A stream of progressively larger restaurant snapshots.
     func searchRestaurants(
         near location: CLLocation,
         radius: Double = 5000,
-        scatterRadius: Double? = nil
+        focusRadius: Double? = nil
     ) -> AsyncThrowingStream<[Restaurant], Error> {
-        let effectiveScatterRadius = scatterRadius ?? radius
-        let region = MKCoordinateRegion(
+        let effectiveFocusRadius = focusRadius ?? radius
+        // Focused region: sized to the user's filter radius
+        let focusedRegion = MKCoordinateRegion(
+            center: location.coordinate,
+            latitudinalMeters: effectiveFocusRadius * 2,
+            longitudinalMeters: effectiveFocusRadius * 2
+        )
+        // Wide region: sized to the full search radius (for pre-caching distant results)
+        let wideRegion = MKCoordinateRegion(
             center: location.coordinate,
             latitudinalMeters: radius * 2,
             longitudinalMeters: radius * 2
@@ -341,20 +350,19 @@ actor RestaurantSearchService {
                     from: 0, to: queries.count, by: batchSize
                 ).map { Array(queries[$0 ..< min($0 + batchSize, queries.count)]) }
 
-                // Fire POI search concurrently — it will be merged after batch 1
+                // Fire POI search concurrently (uses wide region for broad coverage)
                 let poiTask = Task { [self] in
                     await performPOISearch(
-                        region: region,
+                        region: wideRegion,
                         location: location,
                         radius: radius
                     )
                 }
 
+                // === Phase 1: Focused queries (filter-radius-sized region) ===
                 for (batchIdx, batch) in batches.enumerated() {
-                    // Exit early if the stream consumer was cancelled
                     guard !Task.isCancelled else { break }
 
-                    // Run this batch concurrently, collecting per-query SearchResults
                     let batchSearchResults: [(query: String, label: String, result: SearchResult)] =
                         await withTaskGroup(
                             of: (String, String, SearchResult).self
@@ -364,7 +372,7 @@ actor RestaurantSearchService {
                                     let r = await performSearch(
                                         query: cuisine.query,
                                         label: cuisine.label,
-                                        region: region,
+                                        region: focusedRegion,
                                         location: location,
                                         radius: radius
                                     )
@@ -378,35 +386,28 @@ actor RestaurantSearchService {
                             return collected
                         }
 
-                    // Merge batch results into accumulator
                     for item in batchSearchResults {
                         accumulated.append(contentsOf: item.result.results)
                     }
 
-                    // After the first batch, also merge POI results
                     if batchIdx == 0 {
                         let poiResults = await poiTask.value
                         accumulated.append(contentsOf: poiResults)
                     }
 
-                    // Yield a snapshot (user sees results fast)
                     let snapshot = Self.deduplicateAndSort(accumulated)
                     continuation.yield(snapshot)
 
-                    // Collect saturated queries for scatter (run after all batches)
                     for item in batchSearchResults where item.result.rawCount >= Self.mkLocalSearchResultCap {
                         allSaturated.append((query: item.query, label: item.label))
                     }
 
-                    // Delay between batches (skip after last)
                     if batchIdx < batches.count - 1 {
                         try? await Task.sleep(nanoseconds: delayNs)
                     }
                 }
 
-                // --- Scatter phase: run AFTER all batches to avoid rate-limit starvation ---
-                // Scatter queries are batched (5 at a time) with delays to stay
-                // within MapKit rate limits.
+                // === Phase 2: Scatter for saturated queries ===
                 if !allSaturated.isEmpty, !Task.isCancelled {
                     let scatterBatchSize = 5
                     let scatterBatches = stride(from: 0, to: allSaturated.count, by: scatterBatchSize).map {
@@ -423,7 +424,7 @@ actor RestaurantSearchService {
                                 group.addTask { [self] in
                                     let node = SearchNode(
                                         centre: location.coordinate,
-                                        radius: effectiveScatterRadius,
+                                        radius: effectiveFocusRadius,
                                         depth: 0
                                     )
                                     return await scatterIfSaturated(
@@ -448,14 +449,54 @@ actor RestaurantSearchService {
                             continuation.yield(scatterSnapshot)
                         }
 
-                        // Delay between scatter batches (skip after last)
                         if scatterIdx < scatterBatches.count - 1 {
                             try? await Task.sleep(nanoseconds: delayNs)
                         }
                     }
                 }
 
-                // If we never yielded anything, throw noResults
+                // === Phase 3: Wide pass (full-radius region) for distant results ===
+                // Re-run all queries with the wide region to catch restaurants beyond
+                // the focus radius. Only runs if focus radius < full radius.
+                if effectiveFocusRadius < radius, !Task.isCancelled {
+                    for (batchIdx, batch) in batches.enumerated() {
+                        guard !Task.isCancelled else { break }
+
+                        let batchResults = await withTaskGroup(
+                            of: SearchResult.self
+                        ) { group in
+                            for cuisine in batch {
+                                group.addTask { [self] in
+                                    await performSearch(
+                                        query: cuisine.query,
+                                        label: cuisine.label,
+                                        region: wideRegion,
+                                        location: location,
+                                        radius: radius
+                                    )
+                                }
+                            }
+                            var results: [SearchResult] = []
+                            for await r in group {
+                                results.append(r)
+                            }
+                            return results
+                        }
+
+                        for result in batchResults {
+                            accumulated.append(contentsOf: result.results)
+                        }
+
+                        let snapshot = Self.deduplicateAndSort(accumulated)
+                        continuation.yield(snapshot)
+
+                        if batchIdx < batches.count - 1 {
+                            try? await Task.sleep(nanoseconds: delayNs)
+                        }
+                    }
+                }
+
+                // Finish
                 let final = Self.deduplicateAndSort(accumulated)
                 if final.isEmpty {
                     continuation.finish(throwing: SearchError.noResults)
@@ -464,7 +505,6 @@ actor RestaurantSearchService {
                 }
             }
 
-            // Cancel the inner task when the stream consumer stops listening
             continuation.onTermination = { @Sendable _ in
                 innerTask.cancel()
             }
