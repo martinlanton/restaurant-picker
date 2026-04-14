@@ -2,18 +2,45 @@ import SwiftUI
 
 /// The main content view of the Restaurant Picker app.
 ///
-/// This view composes the restaurant list, distance filter, and
-/// the decide button into a cohesive user interface.
+/// Presents a `TabView` with two tabs:
+/// - **Restaurants**: the restaurant list, filters, and decide button.
+/// - **Map**: a full-screen map for setting a custom search location.
+///
+/// When the user drops a pin on the map tab, the restaurant list
+/// automatically re-fetches using the pinned location.
 struct ContentView: View {
     @EnvironmentObject private var ratingStore: RatingStore
+    @EnvironmentObject private var locationManager: LocationManager
     @ObservedObject var viewModel: RestaurantViewModel
 
     /// Whether the filter sheet is presented.
     @State private var showCuisineFilter = false
 
     var body: some View {
+        TabView {
+            restaurantTab
+                .tabItem {
+                    Label("Restaurants", systemImage: "fork.knife")
+                }
+
+            MapLocationView()
+                .tabItem {
+                    Label("Map", systemImage: "map")
+                }
+        }
+    }
+
+    // MARK: - Restaurant Tab
+
+    /// The full restaurant list tab content.
+    private var restaurantTab: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Override location banner
+                if locationManager.overrideLocation != nil {
+                    overrideBanner
+                }
+
                 // Distance filter with cuisine filter button
                 HStack(alignment: .bottom, spacing: 16) {
                     cuisineFilterButton
@@ -89,6 +116,28 @@ struct ContentView: View {
         .task {
             await viewModel.fetchNearbyRestaurants()
         }
+    }
+
+    // MARK: - Override Banner
+
+    /// A banner displayed when the user has set a custom search location.
+    private var overrideBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "mappin.circle.fill")
+                .foregroundStyle(.red)
+            Text("Searching custom location")
+                .font(.caption)
+                .fontWeight(.medium)
+            Spacer()
+            Button("Reset") {
+                locationManager.clearOverrideLocation()
+            }
+            .font(.caption)
+            .fontWeight(.semibold)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color.red.opacity(0.1))
     }
 
     // MARK: - View Components
@@ -191,4 +240,5 @@ struct ContentView: View {
     let store = RatingStore()
     ContentView(viewModel: RestaurantViewModel(ratingStore: store))
         .environmentObject(store)
+        .environmentObject(LocationManager())
 }

@@ -41,8 +41,12 @@ actor RestaurantSearchService {
     /// By searching for many cuisine types in parallel, we can discover
     /// hundreds of unique restaurants in the same area.
     static let cuisineQueries: [(query: String, label: String)] = [
+        // Generic catch-all (label stripped during deduplication)
         ("restaurant", "Restaurant"),
-        ("chinese restaurant", "Chinese"),
+        ("family restaurant", "Family Restaurant"),
+        ("food court", "Food Court"),
+
+        // MARK: Japanese
         ("japanese restaurant", "Japanese"),
         ("sushi restaurant", "Sushi"),
         ("ramen restaurant", "Ramen"),
@@ -55,50 +59,111 @@ actor RestaurantSearchService {
         ("washoku restaurant", "Washoku"),
         ("okonomiyaki restaurant", "Okonomiyaki"),
         ("takoyaki restaurant", "Takoyaki"),
-        ("curry restaurant", "Curry"),
         ("gyudon restaurant", "Gyudon"),
         ("donburi restaurant", "Donburi"),
         ("teppanyaki restaurant", "Teppanyaki"),
         ("kaiseki restaurant", "Kaiseki"),
         ("kushikatsu restaurant", "Kushikatsu"),
         ("yoshoku restaurant", "Yoshoku"),
-        ("family restaurant", "Family Restaurant"),
+
+        // MARK: East & Southeast Asian
+        ("chinese restaurant", "Chinese"),
+        ("dim sum restaurant", "Dim Sum"),
         ("korean restaurant", "Korean"),
         ("thai restaurant", "Thai"),
         ("vietnamese restaurant", "Vietnamese"),
+        ("pho restaurant", "Pho"),
+        ("filipino restaurant", "Filipino"),
+        ("indonesian restaurant", "Indonesian"),
+        ("malaysian restaurant", "Malaysian"),
+        ("singaporean restaurant", "Singaporean"),
+        ("taiwanese restaurant", "Taiwanese"),
+        ("boba tea", "Boba Tea"),
+
+        // MARK: South & Central Asian
         ("indian restaurant", "Indian"),
+        ("curry restaurant", "Curry"),
+        ("nepali restaurant", "Nepali"),
+        ("pakistani restaurant", "Pakistani"),
+        ("tibetan restaurant", "Tibetan"),
+        ("afghan restaurant", "Afghan"),
+
+        // MARK: Middle Eastern & African
+        ("middle eastern restaurant", "Middle Eastern"),
+        ("lebanese restaurant", "Lebanese"),
+        ("turkish restaurant", "Turkish"),
+        ("shawarma restaurant", "Shawarma"),
+        ("falafel restaurant", "Falafel"),
+        ("kebab restaurant", "Kebab"),
+        ("moroccan restaurant", "Moroccan"),
+        ("ethiopian restaurant", "Ethiopian"),
+        ("african restaurant", "African"),
+
+        // MARK: European
         ("italian restaurant", "Italian"),
         ("pizza restaurant", "Pizza"),
         ("pasta restaurant", "Pasta"),
-        ("mexican restaurant", "Mexican"),
         ("french restaurant", "French"),
-        ("mediterranean restaurant", "Mediterranean"),
+        ("spanish restaurant", "Spanish"),
+        ("tapas restaurant", "Tapas"),
         ("greek restaurant", "Greek"),
-        ("turkish restaurant", "Turkish"),
-        ("lebanese restaurant", "Lebanese"),
+        ("mediterranean restaurant", "Mediterranean"),
+        ("german restaurant", "German"),
+        ("british restaurant", "British"),
+        ("irish restaurant", "Irish"),
+        ("portuguese restaurant", "Portuguese"),
+        ("scandinavian restaurant", "Scandinavian"),
+        ("polish restaurant", "Polish"),
+        ("hungarian restaurant", "Hungarian"),
+        ("austrian restaurant", "Austrian"),
+        ("swiss restaurant", "Swiss"),
+        ("belgian restaurant", "Belgian"),
+        ("dutch restaurant", "Dutch"),
+        ("georgian restaurant", "Georgian"),
+        ("russian restaurant", "Russian"),
+
+        // MARK: Americas
         ("american restaurant", "American"),
         ("burger restaurant", "Burger"),
         ("steakhouse", "Steakhouse"),
-        ("seafood restaurant", "Seafood"),
-        ("vegetarian restaurant", "Vegetarian"),
-        ("vegan restaurant", "Vegan"),
-        ("breakfast restaurant", "Breakfast"),
-        ("brunch restaurant", "Brunch"),
-        ("cafe restaurant", "Café"),
-        ("bakery", "Bakery"),
-        ("bbq restaurant", "BBQ"),
-        ("tapas restaurant", "Tapas"),
-        ("spanish restaurant", "Spanish"),
-        ("ethiopian restaurant", "Ethiopian"),
-        ("peruvian restaurant", "Peruvian"),
+        ("mexican restaurant", "Mexican"),
+        ("tex-mex restaurant", "Tex-Mex"),
         ("brazilian restaurant", "Brazilian"),
+        ("peruvian restaurant", "Peruvian"),
         ("caribbean restaurant", "Caribbean"),
-        ("middle eastern restaurant", "Middle Eastern"),
-        ("african restaurant", "African"),
-        ("dim sum restaurant", "Dim Sum"),
+        ("cajun restaurant", "Cajun"),
+        ("creole restaurant", "Creole"),
+        ("soul food restaurant", "Soul Food"),
+        ("hawaiian restaurant", "Hawaiian"),
+        ("poke restaurant", "Poke"),
+
+        // MARK: Casual & Quick Service
+        ("seafood restaurant", "Seafood"),
+        ("bbq restaurant", "BBQ"),
         ("noodle restaurant", "Noodle"),
         ("dumpling restaurant", "Dumpling"),
-        ("food court", "Food Court")
+        ("deli", "Deli"),
+        ("sandwich shop", "Sandwich"),
+        ("diner", "Diner"),
+        ("fried chicken restaurant", "Fried Chicken"),
+        ("wings restaurant", "Wings"),
+        ("hot dog restaurant", "Hot Dog"),
+
+        // MARK: Dietary
+        ("vegetarian restaurant", "Vegetarian"),
+        ("vegan restaurant", "Vegan"),
+
+        // MARK: Breakfast & Brunch
+        ("breakfast restaurant", "Breakfast"),
+        ("brunch restaurant", "Brunch"),
+
+        // MARK: Café, Bakery & Dessert
+        ("cafe restaurant", "Café"),
+        ("bakery", "Bakery"),
+        ("ice cream shop", "Ice Cream"),
+        ("dessert restaurant", "Dessert"),
+        ("donut shop", "Donuts"),
+        ("smoothie juice bar", "Juice Bar"),
     ]
 
     // MARK: - Generic Categories
@@ -113,7 +178,8 @@ actor RestaurantSearchService {
     /// Note: "Café" and "Bakery" are **not** generic — they are valid
     /// cuisine types that users can filter on.
     static let genericCategories: Set<String> = [
-        "Restaurant", "Food Market", "Brewery", "Winery", "Nightlife"
+        "Restaurant", "Family Restaurant", "Food Court",
+        "Food Market", "Brewery", "Winery", "Nightlife",
     ]
 
     // MARK: - Public Methods

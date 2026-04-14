@@ -1,3 +1,4 @@
+import Combine
 import CoreLocation
 import Foundation
 
@@ -88,6 +89,9 @@ final class RestaurantViewModel: ObservableObject {
     private let searchService: RestaurantSearchService
     private(set) var ratingStore: RatingStore
 
+    /// Cancellable for observing location override changes.
+    private var overrideCancellable: AnyCancellable?
+
     // MARK: - Initialization
 
     /// Creates a new RestaurantViewModel with dependencies.
@@ -105,6 +109,7 @@ final class RestaurantViewModel: ObservableObject {
         self.locationManager = locationManager ?? LocationManager()
         self.searchService = searchService ?? RestaurantSearchService()
         self.ratingStore = ratingStore ?? RatingStore()
+        observeOverrideLocation()
     }
 
     /// Creates a new RestaurantViewModel with pre-loaded restaurants (for testing/previews).
@@ -123,45 +128,55 @@ final class RestaurantViewModel: ObservableObject {
 
     // MARK: - Public Methods
 
-    /// Fetches nearby restaurants based on the user's current location.
+    /// Fetches nearby restaurants based on the effective location.
     ///
-    /// This method first requests location authorization if needed,
-    /// then searches for restaurants within the current filter radius.
+    /// Uses the override location (map pin) if set, otherwise falls
+    /// back to the device GPS location. Requests authorization and
+    /// GPS fix only when no override is active.
     func fetchNearbyRestaurants() async {
         guard !isLoading else { return }
 
         isLoading = true
         errorMessage = nil
 
-        // Request location authorization if not determined
-        if locationManager.authorizationStatus == .notDetermined {
-            locationManager.requestAuthorization()
-            // Wait a moment for the user to respond
-            try? await Task.sleep(nanoseconds: 500_000_000)
-        }
+        // When an override location is set (map pin), skip authorization
+        // and GPS — use the override directly.
+        let location: CLLocation
 
-        // Check authorization status
-        guard locationManager.isAuthorized else {
-            if locationManager.isDenied {
-                errorMessage = "Location access denied. Please enable location services in Settings."
-            } else {
-                errorMessage = "Location access not yet authorized."
+        if let override = locationManager.overrideLocation {
+            location = override
+        } else {
+            // Request location authorization if not determined
+            if locationManager.authorizationStatus == .notDetermined {
+                locationManager.requestAuthorization()
+                // Wait a moment for the user to respond
+                try? await Task.sleep(nanoseconds: 500_000_000)
             }
-            isLoading = false
-            return
-        }
 
-        // Request current location if needed
-        if locationManager.currentLocation == nil {
-            locationManager.requestLocation()
-            // Wait for location
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-        }
+            // Check authorization status
+            guard locationManager.isAuthorized else {
+                if locationManager.isDenied {
+                    errorMessage = "Location access denied. Please enable location services in Settings."
+                } else {
+                    errorMessage = "Location access not yet authorized."
+                }
+                isLoading = false
+                return
+            }
 
-        guard let location = locationManager.currentLocation else {
-            errorMessage = "Unable to determine your location."
-            isLoading = false
-            return
+            // Request current location if needed
+            if locationManager.currentLocation == nil {
+                locationManager.requestLocation()
+                // Wait for location
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+
+            guard let gpsLocation = locationManager.currentLocation else {
+                errorMessage = "Unable to determine your location."
+                isLoading = false
+                return
+            }
+            location = gpsLocation
         }
 
         // Search for restaurants with a wide radius; the UI filter narrows what is shown.
@@ -183,7 +198,7 @@ final class RestaurantViewModel: ObservableObject {
     /// For restaurants already in the list, merges cuisine tags and upgrades
     /// the display category. For new restaurants, appends them.
     private func fetchCuisineSpecific(_ cuisines: Set<String>) async {
-        guard let location = locationManager.currentLocation else { return }
+        guard let location = locationManager.effectiveLocation else { return }
 
         let results = await searchService.searchCuisines(cuisines, near: location, radius: 10000)
         guard !results.isEmpty else { return }
@@ -271,6 +286,24 @@ final class RestaurantViewModel: ObservableObject {
     }
 
     // MARK: - Private Methods
+
+    /// Subscribes to `locationManager.overrideLocation` changes and
+    /// triggers a restaurant re-fetch whenever the override is set or cleared.
+    private func observeOverrideLocation() {
+        overrideCancellable = locationManager.$overrideLocation
+            .dropFirst() // skip the initial nil value
+            .removeDuplicates { lhs, rhs in
+                // Treat two locations within 1m as identical to avoid redundant fetches
+                guard let lhs, let rhs else { return lhs == nil && rhs == nil }
+                return lhs.distance(from: rhs) < 1
+            }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { @MainActor in
+                    await self.fetchNearbyRestaurants()
+                }
+            }
+    }
 
     /// Applies the distance, cuisine, and rating filters to the restaurants list.
     private func applyFilter() {

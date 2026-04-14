@@ -33,8 +33,9 @@ struct Restaurant: Identifiable, Equatable {
     let category: String?
 
     /// All cuisine query labels that matched this restaurant.
-    /// Used for filtering — a restaurant found by both "restaurant" and
-    /// "yakiniku restaurant" queries will have tags ["Restaurant", "Yakiniku"].
+    /// Used for filtering — a restaurant found by both "yakiniku restaurant"
+    /// and "japanese restaurant" queries will have tags ["Yakiniku", "Japanese"].
+    /// Generic labels (e.g. "Restaurant") are stripped during deduplication.
     let cuisineTags: Set<String>
 
     /// Phone number if available.

@@ -5,13 +5,15 @@ import Foundation
 ///
 /// This class handles requesting location permissions and tracking
 /// the user's current location for restaurant search purposes.
+/// Supports an optional location override so users can explore
+/// restaurants in a different area via the map tab.
 ///
 /// ## Usage
 /// ```swift
 /// let locationManager = LocationManager()
 /// await locationManager.requestAuthorization()
-/// if let location = locationManager.currentLocation {
-///     print("User is at \(location.coordinate)")
+/// if let location = locationManager.effectiveLocation {
+///     print("Searching at \(location.coordinate)")
 /// }
 /// ```
 @MainActor
@@ -20,6 +22,12 @@ final class LocationManager: NSObject, ObservableObject {
 
     /// The current location of the user.
     @Published var currentLocation: CLLocation?
+
+    /// A manually-set location that overrides the GPS location.
+    ///
+    /// When non-nil, `effectiveLocation` returns this instead of the
+    /// device GPS location. Set via the map tab's long-press gesture.
+    @Published var overrideLocation: CLLocation?
 
     /// The current authorization status.
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
@@ -40,6 +48,26 @@ final class LocationManager: NSObject, ObservableObject {
     }
 
     // MARK: - Public Methods
+
+    /// The location to use for restaurant searches.
+    ///
+    /// Returns `overrideLocation` if the user has placed a pin on the map,
+    /// otherwise falls back to the device GPS location.
+    var effectiveLocation: CLLocation? {
+        overrideLocation ?? currentLocation
+    }
+
+    /// Sets a manual location override from the map tab.
+    ///
+    /// - Parameter location: The coordinate the user selected on the map.
+    func setOverrideLocation(_ location: CLLocation) {
+        overrideLocation = location
+    }
+
+    /// Clears the location override, reverting to the device GPS location.
+    func clearOverrideLocation() {
+        overrideLocation = nil
+    }
 
     /// Requests location authorization from the user.
     ///

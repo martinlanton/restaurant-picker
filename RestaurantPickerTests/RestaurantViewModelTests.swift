@@ -150,13 +150,30 @@ final class RestaurantViewModelTests: XCTestCase {
         // Act
         let cuisines = viewModel.availableCuisines
 
-        // Assert — derived from cuisineQueries, sorted, excluding "Restaurant"
+        // Assert — derived from cuisineQueries, sorted, excluding generic labels
         XCTAssertFalse(cuisines.isEmpty)
         XCTAssertEqual(cuisines, cuisines.sorted())
+
+        // Generic labels must be excluded
         XCTAssertFalse(cuisines.contains("Restaurant"))
+        XCTAssertFalse(cuisines.contains("Family Restaurant"))
+        XCTAssertFalse(cuisines.contains("Food Court"))
+
+        // Original cuisines still present
         XCTAssertTrue(cuisines.contains("Japanese"))
         XCTAssertTrue(cuisines.contains("Italian"))
         XCTAssertTrue(cuisines.contains("Yakiniku"))
+
+        // Newly added cuisines present
+        XCTAssertTrue(cuisines.contains("Filipino"))
+        XCTAssertTrue(cuisines.contains("Malaysian"))
+        XCTAssertTrue(cuisines.contains("Korean"))
+        XCTAssertTrue(cuisines.contains("German"))
+        XCTAssertTrue(cuisines.contains("Cajun"))
+        XCTAssertTrue(cuisines.contains("Poke"))
+        XCTAssertTrue(cuisines.contains("Kebab"))
+        XCTAssertTrue(cuisines.contains("Deli"))
+        XCTAssertTrue(cuisines.contains("Ice Cream"))
     }
 
     @MainActor
