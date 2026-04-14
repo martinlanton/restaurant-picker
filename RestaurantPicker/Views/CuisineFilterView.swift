@@ -11,35 +11,24 @@ private enum FilterMode: String, CaseIterable {
 
 /// A sheet for filtering restaurants by cuisine type using a two-level hierarchy.
 ///
-/// The top level shows continents and countries as peers. Tapping an expandable
-/// row reveals its leaf cuisine chips inline via `DisclosureGroup`.
-///
-/// - Continents expand to show every country label AND every regional cuisine
-///   under those countries, all as flat chips.
-/// - Countries expand to show only their own regional sub-cuisines.
-/// - Countries with no sub-cuisines are simple leaf toggles.
-///
-/// A segmented picker at the top switches between Include and Exclude mode.
-/// A tri-state indicator on each parent row reflects how many of its leaves
-/// are currently active.
+/// All top-level regions (continents + countries) are shown as a flowing chip
+/// cloud. Chips that have sub-cuisines show a small chevron. Tapping one opens
+/// its sub-cuisine chips inline below the cloud, indented to signal nesting.
+/// Only one top-level region can be open at a time.
 struct CuisineFilterView: View {
     // MARK: - Properties
 
-    /// Cuisines to include (show only these). Empty = show all.
     @Binding var selectedCuisines: Set<String>
-
-    /// Cuisines to exclude (hide these). Empty = exclude nothing.
     @Binding var excludedCuisines: Set<String>
-
-    /// Minimum star rating filter. Nil = show all.
     @Binding var minimumRating: Int?
 
     @Environment(\.dismiss) private var dismiss
 
     @State private var filterMode: FilterMode = .include
-    @State private var expandedRegions: Set<String> = []
+    @State private var openRegion: String?
 
     private let ratingOptions = RestaurantViewModel.ratingFilterOptions
+    private let chipSpacing: CGFloat = 8
 
     // MARK: - Body
 
@@ -69,12 +58,12 @@ struct CuisineFilterView: View {
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Rating Section
 
     private var ratingSection: some View {
         Section {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: chipSpacing) {
                     ForEach(ratingOptions, id: \.label) { option in
                         chipButton(
                             label: option.label,
@@ -92,6 +81,8 @@ struct CuisineFilterView: View {
         }
     }
 
+    // MARK: - Cuisine Section
+
     private var cuisineSection: some View {
         Section {
             // Include / Exclude mode picker
@@ -103,10 +94,11 @@ struct CuisineFilterView: View {
             .pickerStyle(.segmented)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
 
-            // Hierarchy rows
-            ForEach(CuisineHierarchy.regions) { region in
-                regionRow(region)
-            }
+            // Single list row that contains the entire chip cloud + inline expansion
+            chipCloudRow
+                .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                .listRowSeparator(.hidden)
+
         } header: {
             Text("Cuisine")
         } footer: {
@@ -116,133 +108,151 @@ struct CuisineFilterView: View {
         }
     }
 
-    // MARK: - Region Row
+    // MARK: - Chip Cloud
 
-    @ViewBuilder
-    private func regionRow(_ region: CuisineRegion) -> some View {
-        if region.isLeaf {
-            // Simple leaf toggle (country with no sub-cuisines)
-            leafToggleRow(
-                label: region.name,
-                cuisine: bareLabel(region.name)
-            )
-        } else {
-            expandableRow(region)
-        }
-    }
+    /// Uses RowInjectingLayout: a custom Layout that wraps chips into rows and
+    /// injects the sub-panel view (the last child) after the row containing
+    /// the open chip — all in a single layout pass, no measurement tricks needed.
+    private var chipCloudRow: some View {
+        let regions = CuisineHierarchy.regions
+        // Index of the open region among all regions (-1 = none open)
+        let openIdx = regions.firstIndex(where: { $0.name == openRegion }) ?? -1
+        let hasPanel = openIdx >= 0 &&
+            !(regions[openIdx].isLeaf) &&
+            openRegion != nil
 
-    /// A full-width tappable row for an expandable continent or country.
-    private func expandableRow(_ region: CuisineRegion) -> some View {
-        let isExpanded = expandedRegions.contains(region.name)
-        let leaves = region.isContinent ? continentLeaves(region) : region.allCuisines
-        let activeSet = activeSetForMode()
-        let state = triState(leaves: leaves, activeSet: activeSet)
-
-        return VStack(alignment: .leading, spacing: 0) {
-            // Header row
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    if isExpanded {
-                        expandedRegions.remove(region.name)
-                    } else {
-                        expandedRegions.insert(region.name)
-                    }
-                }
-            } label: {
-                HStack {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .frame(width: 16)
-
-                    Text(region.name)
-                        .foregroundColor(.primary)
-
-                    Spacer()
-
-                    triStateIndicator(state: state, activeColor: activeColor())
-
-                    // "Select All / None" button
-                    Button {
-                        toggleAll(leaves: leaves, state: state)
-                    } label: {
-                        Text(state == .all ? "None" : "All")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .contentShape(Rectangle())
+        return RowInjectingLayout(
+            chipCount: regions.count,
+            injectAfterChipIndex: hasPanel ? openIdx : -1,
+            spacing: chipSpacing
+        ) {
+            // Chip subviews (indices 0 ..< regions.count)
+            ForEach(regions) { region in
+                regionChip(region)
             }
-            .buttonStyle(.plain)
-            .padding(.vertical, 4)
-
-            // Expanded content
-            if isExpanded {
-                if region.isContinent {
-                    continentExpandedContent(region)
-                } else {
-                    countryExpandedContent(region.allCuisines)
-                }
+            // Sub-panel subview (index == regions.count), always present but
+            // hidden when nothing is open so Layout always has the same child count.
+            if let name = openRegion,
+               let region = regions.first(where: { $0.name == name }),
+               hasPanel {
+                subCuisinePanel(for: region)
+            } else {
+                Color.clear.frame(width: 0, height: 0)
             }
         }
     }
 
-    /// Expanded view for a continent: chips for every leaf (countries + regionals).
-    private func continentExpandedContent(_ region: CuisineRegion) -> some View {
-        let leaves = continentLeaves(region)
-        return chipGrid(cuisines: leaves)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-    }
+    // MARK: - Region Chip
 
-    /// Expanded view for a country: chips for its regional sub-cuisines only.
-    private func countryExpandedContent(_ cuisines: [String]) -> some View {
-        chipGrid(cuisines: cuisines)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-    }
-
-    /// A simple row for a leaf country (no sub-cuisines).
-    private func leafToggleRow(label: String, cuisine: String) -> some View {
+    private func regionChip(_ region: CuisineRegion) -> some View {
+        let isOpen = openRegion == region.name
+        let isLeaf = region.isLeaf
         let activeSet = activeSetForMode()
-        let isActive = activeSet.contains(cuisine)
+        let leaves = leafCuisines(for: region)
+        let isActive = isLeaf
+            ? activeSet.contains(bareLabel(region.name))
+            : (!leaves.isEmpty && leaves.allSatisfy { activeSet.contains($0) })
+        let someActive = !isLeaf && leaves.contains(where: { activeSet.contains($0) })
+        let color = activeColor()
+
         return Button {
-            toggle(cuisine: cuisine)
-        } label: {
-            HStack {
-                Text(label)
-                    .foregroundColor(.primary)
-                Spacer()
-                if isActive {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(activeColor())
-                } else {
-                    Image(systemName: "circle")
-                        .foregroundColor(.secondary.opacity(0.5))
+            if isLeaf {
+                toggle(cuisine: bareLabel(region.name))
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    openRegion = isOpen ? nil : region.name
                 }
             }
-            .contentShape(Rectangle())
+        } label: {
+            HStack(spacing: 4) {
+                Text(region.name)
+                    .font(.subheadline)
+                    .fontWeight((isActive || someActive || isOpen) ? .semibold : .regular)
+                if !isLeaf {
+                    Image(systemName: isOpen ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background(chipBg(isActive: isActive, someActive: someActive, isOpen: isOpen, color: color))
+            .foregroundColor(chipFg(isActive: isActive, someActive: someActive, isOpen: isOpen, color: color))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().strokeBorder(
+                    chipBorder(isActive: isActive, someActive: someActive, isOpen: isOpen, color: color),
+                    lineWidth: 1.5
+                )
+            )
         }
         .buttonStyle(.plain)
     }
 
-    // MARK: - Chip Grid
+    // MARK: - Sub-cuisine Panel
 
-    private func chipGrid(cuisines: [String]) -> some View {
-        FlowLayout(spacing: 8) {
-            ForEach(cuisines, id: \.self) { cuisine in
-                let activeSet = activeSetForMode()
-                chipButton(
-                    label: cuisine,
-                    isActive: activeSet.contains(cuisine),
-                    activeColor: activeColor()
-                ) { toggle(cuisine: cuisine) }
+    private func subCuisinePanel(for region: CuisineRegion) -> some View {
+        let leaves = leafCuisines(for: region)
+        let activeSet = activeSetForMode()
+        let state = triState(leaves: leaves, activeSet: activeSet)
+        let color = activeColor()
+
+        return VStack(alignment: .leading, spacing: 8) {
+            // Top divider + "All / None" header
+            HStack {
+                // Visual indent line
+                Rectangle()
+                    .fill(color.opacity(0.4))
+                    .frame(width: 2)
+                    .cornerRadius(1)
+
+                HStack {
+                    Text(bareLabel(region.name))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button {
+                        toggleAll(leaves: leaves, state: state)
+                    } label: {
+                        Text(state == .all ? "Deselect all" : "Select all")
+                            .font(.caption)
+                            .foregroundColor(color)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(height: 20)
+
+            // Sub-cuisine chips
+            FlowLayout(spacing: chipSpacing) {
+                ForEach(leaves, id: \.self) { cuisine in
+                    chipButton(
+                        label: cuisine,
+                        isActive: activeSet.contains(cuisine),
+                        activeColor: color
+                    ) { toggle(cuisine: cuisine) }
+                }
             }
         }
+        .padding(.top, 10)
+        .padding(.leading, 14)
+        .padding(.bottom, 4)
     }
 
-    // MARK: - Chip Button
+    // MARK: - Chip Styling
+
+    private func chipBg(isActive: Bool, someActive: Bool, isOpen: Bool, color: Color) -> Color {
+        if isActive { return color }
+        if someActive || isOpen { return color.opacity(0.12) }
+        return Color.secondary.opacity(0.15)
+    }
+
+    private func chipFg(isActive: Bool, someActive: Bool, isOpen: Bool, color: Color) -> Color {
+        isActive ? .white : (someActive || isOpen ? color : .primary)
+    }
+
+    private func chipBorder(isActive: Bool, someActive: Bool, isOpen: Bool, color: Color) -> Color {
+        (isActive || (!someActive && !isOpen)) ? .clear : color.opacity(0.5)
+    }
 
     private func chipButton(
         label: String,
@@ -256,55 +266,37 @@ struct CuisineFilterView: View {
                 .fontWeight(isActive ? .semibold : .regular)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(isActive ? activeColor : Color.secondary.opacity(0.2))
+                .background(isActive ? activeColor : Color.secondary.opacity(0.15))
                 .foregroundColor(isActive ? .white : .primary)
-                .cornerRadius(16)
+                .clipShape(Capsule())
         }
         .buttonStyle(.plain)
     }
 
-    // MARK: - Tri-state Indicator
+    // MARK: - Tri-state
 
     private enum TriState { case none, some, all }
 
     private func triState(leaves: [String], activeSet: Set<String>) -> TriState {
-        let active = leaves.filter { activeSet.contains($0) }.count
-        if active == 0 { return .none }
-        if active == leaves.count { return .all }
-        return .some
-    }
-
-    @ViewBuilder
-    private func triStateIndicator(state: TriState, activeColor: Color) -> some View {
-        switch state {
-        case .none:
-            Image(systemName: "circle")
-                .foregroundColor(.secondary.opacity(0.5))
-        case .some:
-            Image(systemName: "circle.lefthalf.filled")
-                .foregroundColor(activeColor)
-        case .all:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(activeColor)
-        }
+        let n = leaves.filter { activeSet.contains($0) }.count
+        return n == 0 ? .none : n == leaves.count ? .all : .some
     }
 
     // MARK: - Helpers
 
-    /// All leaf labels for a continent: country labels + all regional sub-cuisines.
+    private func leafCuisines(for region: CuisineRegion) -> [String] {
+        region.isContinent ? continentLeaves(region) : region.allCuisines
+    }
+
     private func continentLeaves(_ region: CuisineRegion) -> [String] {
-        var leaves: [String] = []
+        var out: [String] = []
         for group in region.groups {
-            // Add the country/group name itself as a leaf if it's a country (has cuisines or is standalone)
-            leaves.append(group.name)
-            // Add all regional sub-cuisines (skip if they duplicate the group name)
-            for cuisine in group.cuisines where cuisine != group.name {
-                if !leaves.contains(cuisine) {
-                    leaves.append(cuisine)
-                }
+            out.append(group.name)
+            for c in group.cuisines where c != group.name && !out.contains(c) {
+                out.append(c)
             }
         }
-        return leaves
+        return out
     }
 
     private func activeSetForMode() -> Set<String> {
@@ -315,63 +307,141 @@ struct CuisineFilterView: View {
         filterMode == .include ? .accentColor : .red
     }
 
-    /// Strips the flag emoji prefix from region names to get the bare cuisine label.
-    /// e.g. "🇹🇭 Thai" → "Thai", "🌏 Asia" → "Asia"
     private func bareLabel(_ name: String) -> String {
-        // Drop leading emoji + space
-        let components = name.components(separatedBy: " ")
-        if components.count > 1 {
-            return components.dropFirst().joined(separator: " ")
-        }
-        return name
+        let p = name.components(separatedBy: " ")
+        return p.count > 1 ? p.dropFirst().joined(separator: " ") : name
     }
 
     private func toggle(cuisine: String) {
         if filterMode == .include {
-            if selectedCuisines.contains(cuisine) {
-                selectedCuisines.remove(cuisine)
-            } else {
-                excludedCuisines.remove(cuisine)
-                selectedCuisines.insert(cuisine)
-            }
+            if selectedCuisines.contains(cuisine) { selectedCuisines.remove(cuisine) } else { excludedCuisines.remove(cuisine); selectedCuisines.insert(cuisine) }
         } else {
-            if excludedCuisines.contains(cuisine) {
-                excludedCuisines.remove(cuisine)
-            } else {
-                selectedCuisines.remove(cuisine)
-                excludedCuisines.insert(cuisine)
-            }
+            if excludedCuisines.contains(cuisine) { excludedCuisines.remove(cuisine) } else { selectedCuisines.remove(cuisine); excludedCuisines.insert(cuisine) }
         }
     }
 
     private func toggleAll(leaves: [String], state: TriState) {
-        if state == .all {
-            // Deselect all leaves
-            for leaf in leaves {
-                if filterMode == .include {
-                    selectedCuisines.remove(leaf)
-                } else {
-                    excludedCuisines.remove(leaf)
-                }
-            }
-        } else {
-            // Select all leaves
-            for leaf in leaves {
-                if filterMode == .include {
-                    excludedCuisines.remove(leaf)
-                    selectedCuisines.insert(leaf)
-                } else {
-                    selectedCuisines.remove(leaf)
-                    excludedCuisines.insert(leaf)
-                }
+        for leaf in leaves {
+            if state == .all {
+                if filterMode == .include { selectedCuisines.remove(leaf) } else { excludedCuisines.remove(leaf) }
+            } else {
+                if filterMode == .include { excludedCuisines.remove(leaf); selectedCuisines.insert(leaf) } else { selectedCuisines.remove(leaf); excludedCuisines.insert(leaf) }
             }
         }
     }
 }
 
+// MARK: - RowInjectingLayout
+
+/// A custom Layout that:
+/// 1. Wraps its first `chipCount` children into rows (like FlowLayout).
+/// 2. Places its last child (the sub-panel) at full width immediately
+///    after the row that contains chip at index `injectAfterChipIndex`.
+/// 3. When `injectAfterChipIndex` is -1 the panel child is given zero size.
+private struct RowInjectingLayout: Layout {
+    let chipCount: Int
+    let injectAfterChipIndex: Int
+    let spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        layout(proposal: proposal, subviews: subviews).totalSize
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        let result = layout(proposal: proposal, subviews: subviews)
+        for (i, origin) in result.origins.enumerated() {
+            let size = result.sizes[i]
+            subviews[i].place(
+                at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                proposal: ProposedViewSize(size)
+            )
+        }
+    }
+
+    // MARK: Core layout
+
+    private struct LayoutResult {
+        var origins: [CGPoint]
+        var sizes: [CGSize]
+        var totalSize: CGSize
+    }
+
+    private func layout(proposal: ProposedViewSize, subviews: Subviews) -> LayoutResult {
+        let maxW = proposal.width ?? 320
+        let chips = subviews.prefix(chipCount)
+        let panel = subviews.count > chipCount ? subviews[chipCount] : nil
+
+        // Measure all chips
+        let chipSizes = chips.map { $0.sizeThatFits(.unspecified) }
+
+        // Build rows
+        var rows: [[Int]] = [] // row → [chip index]
+        var currentRow: [Int] = []
+        var currentX: CGFloat = 0
+
+        for (i, size) in chipSizes.enumerated() {
+            let needed = currentRow.isEmpty ? size.width : size.width + spacing
+            if currentX + needed > maxW, !currentRow.isEmpty {
+                rows.append(currentRow)
+                currentRow = [i]
+                currentX = size.width
+            } else {
+                currentRow.append(i)
+                currentX += needed
+            }
+        }
+        if !currentRow.isEmpty { rows.append(currentRow) }
+
+        // Measure panel (full width, or zero if not injecting)
+        let panelSize: CGSize = if let panel, injectAfterChipIndex >= 0 {
+            panel.sizeThatFits(ProposedViewSize(width: maxW, height: nil))
+        } else {
+            .zero
+        }
+
+        // Which row contains injectAfterChipIndex?
+        let injectAfterRow: Int? = injectAfterChipIndex >= 0
+            ? rows.firstIndex(where: { $0.contains(injectAfterChipIndex) })
+            : nil
+
+        // Assign origins
+        var origins = [CGPoint](repeating: .zero, count: subviews.count)
+        var sizes = [CGSize](repeating: .zero, count: subviews.count)
+        var y: CGFloat = 0
+
+        for (rowIdx, row) in rows.enumerated() {
+            let rowHeight = row.map { chipSizes[$0].height }.max() ?? 0
+            var x: CGFloat = 0
+            for chipIdx in row {
+                origins[chipIdx] = CGPoint(x: x, y: y)
+                sizes[chipIdx] = chipSizes[chipIdx]
+                x += chipSizes[chipIdx].width + spacing
+            }
+            y += rowHeight
+
+            // Inject panel after this row if needed
+            if rowIdx == injectAfterRow {
+                y += spacing
+                if subviews.count > chipCount {
+                    origins[chipCount] = CGPoint(x: 0, y: y)
+                    sizes[chipCount] = panelSize
+                    y += panelSize.height
+                }
+            }
+
+            if rowIdx < rows.count - 1 { y += spacing }
+        }
+
+        return LayoutResult(
+            origins: origins,
+            sizes: sizes,
+            totalSize: CGSize(width: maxW, height: y)
+        )
+    }
+}
+
 // MARK: - FlowLayout
 
-/// A layout that wraps items horizontally, flowing to the next line when needed.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
@@ -381,34 +451,23 @@ struct FlowLayout: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
         let result = arrange(proposal: proposal, subviews: subviews)
-        for (index, position) in result.positions.enumerated() {
-            subviews[index].place(
-                at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y),
-                proposal: .unspecified
-            )
+        for (i, pos) in result.positions.enumerated() {
+            subviews[i].place(at: CGPoint(x: bounds.minX + pos.x, y: bounds.minY + pos.y), proposal: .unspecified)
         }
     }
 
     private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (positions: [CGPoint], size: CGSize) {
-        let maxWidth = proposal.width ?? .infinity
+        let maxW = proposal.width ?? .infinity
         var positions: [CGPoint] = []
-        var currentX: CGFloat = 0
-        var currentY: CGFloat = 0
-        var lineHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if currentX + size.width > maxWidth, currentX > 0 {
-                currentX = 0
-                currentY += lineHeight + spacing
-                lineHeight = 0
-            }
-            positions.append(CGPoint(x: currentX, y: currentY))
-            lineHeight = max(lineHeight, size.height)
-            currentX += size.width + spacing
+        var x: CGFloat = 0, y: CGFloat = 0, lineH: CGFloat = 0
+        for sub in subviews {
+            let s = sub.sizeThatFits(.unspecified)
+            if x + s.width > maxW, x > 0 { x = 0; y += lineH + spacing; lineH = 0 }
+            positions.append(CGPoint(x: x, y: y))
+            lineH = max(lineH, s.height)
+            x += s.width + spacing
         }
-
-        return (positions, CGSize(width: maxWidth, height: currentY + lineHeight))
+        return (positions, CGSize(width: maxW, height: y + lineH))
     }
 }
 

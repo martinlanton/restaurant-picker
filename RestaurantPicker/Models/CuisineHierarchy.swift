@@ -84,7 +84,7 @@ enum CuisineHierarchy {
             CuisineGroup(name: "Boba Tea", cuisines: [])
         ]),
 
-        // MARK: Country entries under Asia
+        // MARK: Country entries under Asia (only countries with sub-cuisines)
 
         CuisineRegion(name: "🇯🇵 Japanese", isContinent: false, groups: [
             CuisineGroup(name: "Japanese", cuisines: [
@@ -104,27 +104,16 @@ enum CuisineHierarchy {
                 "Korean", "Korean BBQ", "Korean Fried Chicken"
             ])
         ]),
-        CuisineRegion(name: "🇹🇭 Thai", isContinent: false, groups: []),
         CuisineRegion(name: "🇻🇳 Vietnamese", isContinent: false, groups: [
             CuisineGroup(name: "Vietnamese", cuisines: [
                 "Vietnamese", "Pho", "Bánh Mì"
             ])
         ]),
-        CuisineRegion(name: "🇵🇭 Filipino", isContinent: false, groups: []),
-        CuisineRegion(name: "🇮🇩 Indonesian", isContinent: false, groups: []),
-        CuisineRegion(name: "🇲🇾 Malaysian", isContinent: false, groups: []),
-        CuisineRegion(name: "🇸🇬 Singaporean", isContinent: false, groups: []),
-        CuisineRegion(name: "🇹🇼 Taiwanese", isContinent: false, groups: []),
         CuisineRegion(name: "🇮🇳 Indian", isContinent: false, groups: [
             CuisineGroup(name: "Indian", cuisines: [
                 "Indian", "Curry", "Biryani"
             ])
         ]),
-        CuisineRegion(name: "🇳🇵 Nepali", isContinent: false, groups: []),
-        CuisineRegion(name: "🇵🇰 Pakistani", isContinent: false, groups: []),
-        CuisineRegion(name: "🇱🇰 Sri Lankan", isContinent: false, groups: []),
-        CuisineRegion(name: "🇹🇯 Tibetan", isContinent: false, groups: []),
-        CuisineRegion(name: "🇦🇫 Afghan", isContinent: false, groups: []),
 
         // MARK: - 🌍 Middle East & Africa (continent)
 
@@ -138,7 +127,7 @@ enum CuisineHierarchy {
             ])
         ]),
 
-        // MARK: Country entries under Middle East & Africa
+        // MARK: Country entries under Middle East & Africa (only countries with sub-cuisines)
 
         CuisineRegion(name: "🇱🇧 Lebanese", isContinent: false, groups: [
             CuisineGroup(name: "Lebanese", cuisines: [
@@ -150,16 +139,11 @@ enum CuisineHierarchy {
                 "Turkish", "Kebab"
             ])
         ]),
-        CuisineRegion(name: "🇮🇷 Persian", isContinent: false, groups: []),
         CuisineRegion(name: "🇮🇱 Israeli", isContinent: false, groups: [
             CuisineGroup(name: "Israeli", cuisines: [
                 "Israeli", "Falafel"
             ])
         ]),
-        CuisineRegion(name: "🇪🇬 Egyptian", isContinent: false, groups: []),
-        CuisineRegion(name: "🇲🇦 Moroccan", isContinent: false, groups: []),
-        CuisineRegion(name: "🇪🇹 Ethiopian", isContinent: false, groups: []),
-        CuisineRegion(name: "🇿🇦 South African", isContinent: false, groups: []),
 
         // MARK: - 🌍 Europe (continent)
 
@@ -199,7 +183,7 @@ enum CuisineHierarchy {
             CuisineGroup(name: "Russian", cuisines: ["Russian"])
         ]),
 
-        // MARK: Country entries under Europe
+        // MARK: Country entries under Europe (only countries with sub-cuisines)
 
         CuisineRegion(name: "🇮🇹 Italian", isContinent: false, groups: [
             CuisineGroup(name: "Italian", cuisines: [
@@ -231,12 +215,6 @@ enum CuisineHierarchy {
                 "Irish", "Pub"
             ])
         ]),
-        CuisineRegion(name: "🇩🇪 German", isContinent: false, groups: []),
-        CuisineRegion(name: "🇵🇹 Portuguese", isContinent: false, groups: []),
-        CuisineRegion(name: "🇸🇪 Scandinavian", isContinent: false, groups: []),
-        CuisineRegion(name: "🇵🇱 Polish", isContinent: false, groups: []),
-        CuisineRegion(name: "🇭🇺 Hungarian", isContinent: false, groups: []),
-        CuisineRegion(name: "🇦🇹 Austrian", isContinent: false, groups: []),
         CuisineRegion(name: "🇨🇭 Swiss", isContinent: false, groups: [
             CuisineGroup(name: "Swiss", cuisines: [
                 "Swiss", "Fondue"
@@ -247,9 +225,6 @@ enum CuisineHierarchy {
                 "Belgian", "Waffles"
             ])
         ]),
-        CuisineRegion(name: "🇳🇱 Dutch", isContinent: false, groups: []),
-        CuisineRegion(name: "🇬🇪 Georgian", isContinent: false, groups: []),
-        CuisineRegion(name: "🇷🇺 Russian", isContinent: false, groups: []),
 
         // MARK: - 🌎 Americas (continent)
 
@@ -271,7 +246,7 @@ enum CuisineHierarchy {
             CuisineGroup(name: "Caribbean", cuisines: ["Caribbean"])
         ]),
 
-        // MARK: Country entries under Americas
+        // MARK: Country entries under Americas (only countries with sub-cuisines)
 
         CuisineRegion(name: "🇺🇸 American", isContinent: false, groups: [
             CuisineGroup(name: "American", cuisines: [
@@ -285,13 +260,6 @@ enum CuisineHierarchy {
                 "Mexican", "Tacos", "Tex-Mex"
             ])
         ]),
-        CuisineRegion(name: "🇧🇷 Brazilian", isContinent: false, groups: []),
-        CuisineRegion(name: "🇨🇴 Colombian", isContinent: false, groups: []),
-        CuisineRegion(name: "🇦🇷 Argentinian", isContinent: false, groups: []),
-        CuisineRegion(name: "🇻🇪 Venezuelan", isContinent: false, groups: []),
-        CuisineRegion(name: "🇨🇺 Cuban", isContinent: false, groups: []),
-        CuisineRegion(name: "🇵🇪 Peruvian", isContinent: false, groups: []),
-        CuisineRegion(name: "🇯🇲 Caribbean", isContinent: false, groups: []),
 
         // MARK: - 🥗 Dietary (top-level group)
 
