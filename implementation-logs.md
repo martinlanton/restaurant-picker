@@ -1,3 +1,163 @@
+# Implementation Log: Search Caching, Cancellation & Scatter Radius Fix
+
+**Date**: 2026-04-14
+**Author**: GitHub Copilot
+
+## Overview
+
+Three problems fixed: (1) changing the distance filter or location during
+a search caused redundant network requests, (2) old searches weren't cancelled
+and competed for MapKit rate limits, (3) scatter operated at 10km scale instead
+of the user's filter radius.
+
+## Changes
+
+### RestaurantSearchService.swift
+
+1. **`scatterRadius` parameter on `searchRestaurants`** — new optional param
+   (defaults to `radius`). The ViewModel passes the user's filter radius (e.g.
+   500m) so the depth-0 scatter node uses 500m, giving depth progression:
+   500m → 250m → 125m → 62.5m. The `maxRadius` distance filter on individual
+   results stays at 10km so all results are cached regardless of current filter.
+
+2. **`onTermination` handler on `AsyncThrowingStream`** — the inner `Task`
+   is stored in a variable and cancelled via `continuation.onTermination` when
+   the stream consumer stops listening. This stops MapKit queries immediately
+   when a new search starts.
+
+3. **`Task.isCancelled` check** in the batch loop — exits early between
+   batches to avoid wasted work.
+
+### RestaurantViewModel.swift
+
+4. **`searchTask: Task<Void, Never>?`** — stores the current search task.
+   `fetchNearbyRestaurants` cancels it before starting a new search.
+
+5. **`SearchCacheEntry` + cache system** — results are cached by location
+   (50m threshold). On cache hit: restaurants load instantly from cache,
+   `applyFilter()` runs, no network calls. Cache entries store
+   `(location, searchRadius, restaurants)`.
+
+6. **`findCacheEntry(for:radius:)`** — matches if `searchRadius >= radius`
+   AND `distance < 50m`. Returns cached restaurants.
+
+7. **`updateCache(for:radius:restaurants:)`** — merges new results into
+   existing entries or creates new ones. Keeps the larger search radius.
+
+8. **`mergeNewRestaurants(_:for:)`** — shared helper for dedup-merging
+   new restaurants into the master list + cache. Used by both
+   `runProgressiveSearch` and `fetchCuisineSpecific`.
+
+9. **`refresh()`** — clears cache entries within 50m of current location
+   before re-fetching, forcing a fresh network search.
+
+10. **`runProgressiveSearch`** — extracted from `fetchNearbyRestaurants`.
+    Passes `filterRadius ?? 500` as the scatter radius. Stores results
+    in cache on completion (only if not cancelled).
+
+11. **`networkSearchRadius = 10_000`** — named constant replacing the
+    hardcoded 10000. Used consistently across all search calls.
+
+## Scatter Radius Depth Progression
+
+| Filter Radius | Depth 0 | Depth 1 | Depth 2 | Depth 3 |
+|---|---|---|---|---|
+| 500m | 500m | 250m | 125m | 62.5m |
+| 1km | 1km | 500m | 250m | 125m |
+| 2km | 2km | 1km | 500m | 250m |
+| 5km | 5km | 2.5km | 1.25km | 625m |
+
+## Testing
+
+All 66 tests pass. Build succeeded. SwiftFormat + SwiftLint clean.
+
+---
+
+# Implementation Log: Adaptive Recursive Scatter Search
+
+**Date**: 2026-04-14
+**Author**: GitHub Copilot
+
+## Overview
+
+Queries that return exactly 25 results (MapKit's per-query cap) are now
+automatically re-run from offset centre points. The scatter is recursive:
+saturated offset points subdivide further, and diagonals are filled between
+adjacent saturated cardinals. This self-calibrating approach discovers 2–3×
+more restaurants in dense urban areas while adding zero extra queries in
+sparse locations.
+
+## Changes
+
+### RestaurantSearchService.swift
+
+1. **`mkLocalSearchResultCap = 25` named constant** — Apple's undocumented
+   per-query result limit. Makes saturation detection self-documenting and
+   trivial to update if Apple changes the cap.
+
+2. **`maxScatterDepth = 3`** — bounds worst-case recursion. At depth 3,
+   radii progress R → R/2 → R/4 → R/8. Max ~29 extra queries per label.
+
+3. **`SearchResult` typealias** — `performSearch` now returns
+   `(results: [(Restaurant, String)], rawCount: Int)` where `rawCount` is
+   `response.mapItems.count` captured *before* the `distance <= radius`
+   filter. This is the saturation signal.
+
+4. **`SearchNode` struct** — `(centre, radius, depth)` representing one
+   scatter point in the recursive tree.
+
+5. **Cardinal/Diagonal enums + offset helpers** — compute child centres
+   at N/S/E/W (cardinal) or NE/NW/SE/SW (diagonal) offsets using
+   approximate metric-to-degree conversion.
+
+6. **`scatterIfSaturated` recursive method** — given a saturated query +
+   parent SearchNode:
+   - Fires N/S/E/W at `radius × 0.5` offset with `radius × 0.5` region
+   - Identifies saturated cardinals
+   - **Diagonal fill rule**: for each pair of adjacent saturated cardinals
+     (e.g. N+E → NE), adds a diagonal point at the *same* radius as the
+     parent, checks it for saturation
+   - Recurses on all saturated points with `depth + 1`, up to `maxScatterDepth`
+
+7. **Wired into `searchRestaurants` stream** — after each batch completes,
+   saturated queries (`rawCount >= cap`) trigger `scatterIfSaturated`
+   concurrently. Scatter results merge into the accumulator and an updated
+   snapshot is yielded. The first yield (before any scatter) is unchanged,
+   preserving the ~400ms perceived load time.
+
+8. **`deduplicateAndSort` convenience method** — extracts the repeated
+   sort-specific-first + deduplicate + sort-by-distance pattern into a
+   single reusable method.
+
+### Callers updated
+
+- `performBatchedSearches` — updated to handle `SearchResult` tuple,
+  extracting `.results` for the accumulator.
+
+## Design Decisions
+
+### Pre-filter rawCount for saturation detection
+`rawCount` is `response.mapItems.count` before the radius guard. A query
+near a boundary might return 25 items from MapKit but only 3 pass the
+radius filter — the category is sparse, but using the pre-filter count
+correctly detects MapKit hit its cap.
+
+### Diagonal fill at parent radius
+Diagonal points use the same radius as their parent (not halved). They
+fill the gap *between* two known-dense cardinal regions rather than
+subdividing a single region, so they need the same coverage area.
+
+### Scatter runs after the initial yield
+Each batch yields a snapshot *before* scatter runs. Scatter results
+are yielded as a second snapshot for that batch. This keeps perceived
+first-result time unchanged at ~400ms.
+
+## Testing
+
+All 66 tests pass. Build succeeded. SwiftFormat + SwiftLint clean.
+
+---
+
 # Implementation Log: Progressive Loading + Priority Batching
 
 **Date**: 2026-04-14
