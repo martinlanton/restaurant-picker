@@ -36,6 +36,9 @@ final class RestaurantViewModel: ObservableObject {
     /// Whether a restaurant search is in progress.
     @Published private(set) var isLoading = false
 
+    /// Whether additional batches are still loading after the first results appeared.
+    @Published private(set) var isLoadingMore = false
+
     /// Error message if something goes wrong.
     @Published var errorMessage: String?
 
@@ -180,16 +183,32 @@ final class RestaurantViewModel: ObservableObject {
         }
 
         // Search for restaurants with a wide radius; the UI filter narrows what is shown.
+        // The stream yields progressively larger snapshots as batches complete.
+        let stream = await searchService.searchRestaurants(near: location, radius: 10000)
+        var receivedAny = false
+
         do {
-            let results = try await searchService.searchRestaurants(near: location, radius: 10000)
-            restaurants = results
-            applyFilter()
-            errorMessage = nil
+            for try await snapshot in stream {
+                restaurants = snapshot
+                applyFilter()
+                errorMessage = nil
+
+                if !receivedAny {
+                    // First batch arrived — stop the full-screen spinner,
+                    // switch to the subtle "loading more" indicator.
+                    receivedAny = true
+                    isLoading = false
+                    isLoadingMore = true
+                }
+            }
         } catch {
-            errorMessage = error.localizedDescription
+            if !receivedAny {
+                errorMessage = error.localizedDescription
+            }
         }
 
         isLoading = false
+        isLoadingMore = false
     }
 
     /// Performs a targeted search for specific cuisines and merges results

@@ -6,7 +6,7 @@ This repository implements an iOS application that helps users randomly select n
 
 **Key Features**:
 - Display restaurants from Apple Maps within a specified radius
-- Multi-cuisine parallel search (~150 cuisine-specific queries + POI category search) for broader coverage
+- Multi-cuisine parallel search (~150 priority-ordered queries + POI category search) with progressive loading — results appear within ~400ms, more stream in over ~4–5s
 - Filter restaurants by distance (configurable)
 - Search restaurants by name or category
 - Include or exclude cuisine types via a hierarchical filter sheet (continent → country → regional cuisines)

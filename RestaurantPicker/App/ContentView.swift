@@ -58,6 +58,11 @@ struct ContentView: View {
                         )
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        if viewModel.isLoadingMore {
+                            Text("· finding more…")
+                                .font(.caption)
+                                .foregroundColor(.secondary.opacity(0.7))
+                        }
                         Spacer()
                     }
                     .padding(.horizontal)

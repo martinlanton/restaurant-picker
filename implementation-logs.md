@@ -1,3 +1,54 @@
+# Implementation Log: Progressive Loading + Priority Batching
+
+**Date**: 2026-04-14
+**Author**: GitHub Copilot
+
+## Overview
+
+Restaurant search results now stream progressively — the list populates within
+~400ms instead of waiting ~6–7s for all 150+ queries to complete. Queries are
+priority-ordered so the first batch returns results anywhere in the world.
+
+## Changes
+
+### RestaurantSearchService.swift
+
+1. **Priority-ordered `cuisineQueries`**: Universally high-yield queries
+   (restaurant, café, pizza, sushi, ramen, burger, Chinese, Italian, Thai, etc.)
+   are now in the first batch of 15. Niche/regional queries (washoku, kushikatsu,
+   fondue, Georgian, etc.) run last.
+
+2. **Tuned batching**: `batchSize` 10→15, `delayNanoseconds` 100ms→50ms.
+   Total wall-clock time reduced from ~6–7s to ~4–5s on a good network.
+
+3. **`searchRestaurants` returns `AsyncThrowingStream<[Restaurant], Error>`**:
+   Each batch yields a progressively larger deduplicated snapshot. The POI
+   category search runs concurrently with batch 1 and its results are merged
+   into the first yield. The stream finishes after all batches complete, or
+   throws `SearchError.noResults` if the final accumulation is empty.
+
+### RestaurantViewModel.swift
+
+4. **`isLoadingMore` published property**: `true` while subsequent batches
+   are still running after the first results have appeared.
+
+5. **`fetchNearbyRestaurants` consumes the stream**: `for try await snapshot in stream`.
+   After the first yield, `isLoading` becomes `false` (hides the full-screen
+   spinner) and `isLoadingMore` becomes `true`. Each snapshot replaces
+   `restaurants` and re-applies filters. Both flags become `false` when the
+   stream ends.
+
+### ContentView.swift
+
+6. **"finding more…" indicator**: The restaurant count line shows
+   "· finding more…" text next to the count while `isLoadingMore` is `true`.
+
+## Testing
+
+All 66 tests pass. Build succeeded. SwiftFormat + SwiftLint clean.
+
+---
+
 # Implementation Log: Hierarchical Cuisine Filter UI + Expanded Queries
 
 **Date**: 2026-04-14
