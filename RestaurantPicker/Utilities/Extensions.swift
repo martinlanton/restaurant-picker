@@ -18,16 +18,16 @@ extension Double {
     /// - Returns: A string like "350 m" or "1.5 km"
     var formattedAsDistance: String {
         if self < 1000 {
-            return String(format: "%.0f m", self)
+            String(format: "%.0f m", self)
         } else {
-            return String(format: "%.1f km", self / 1000)
+            String(format: "%.1f km", self / 1000)
         }
     }
 }
 
 // MARK: - Optional Extensions
 
-extension Optional where Wrapped == Double {
+extension Double? {
     /// Formats an optional distance value.
     ///
     /// - Returns: The formatted distance or "Any" if nil.

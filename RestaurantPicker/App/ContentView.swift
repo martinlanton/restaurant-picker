@@ -97,7 +97,6 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showCuisineFilter) {
                 CuisineFilterView(
-                    availableCuisines: viewModel.availableCuisines,
                     selectedCuisines: $viewModel.selectedCuisines,
                     excludedCuisines: $viewModel.excludedCuisines,
                     minimumRating: $viewModel.minimumRating

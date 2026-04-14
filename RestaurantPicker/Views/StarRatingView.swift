@@ -86,9 +86,9 @@ struct StarRatingView: View {
 
     private var rejectColor: Color {
         if rating == 0 {
-            return .red
+            .red
         } else {
-            return .gray.opacity(0.3)
+            .gray.opacity(0.3)
         }
     }
 

@@ -218,13 +218,13 @@ final class RestaurantViewModel: ObservableObject {
                 let mergedTags = existing.cuisineTags.union(restaurant.cuisineTags)
 
                 // Upgrade display category if new one is more specific
-                let displayCategory: String?
-                if let newCat = restaurant.category,
-                   !RestaurantSearchService.genericCategories.contains(newCat),
-                   RestaurantSearchService.genericCategories.contains(existing.category ?? "") {
-                    displayCategory = newCat
+                let displayCategory: String? = if let newCat = restaurant.category,
+                                                  !RestaurantSearchService.genericCategories.contains(newCat),
+                                                  RestaurantSearchService.genericCategories
+                                                  .contains(existing.category ?? "") {
+                    newCat
                 } else {
-                    displayCategory = existing.category
+                    existing.category
                 }
 
                 if mergedTags != existing.cuisineTags || displayCategory != existing.category {

@@ -6,10 +6,10 @@ This repository implements an iOS application that helps users randomly select n
 
 **Key Features**:
 - Display restaurants from Apple Maps within a specified radius
-- Multi-cuisine parallel search (58 cuisine-specific queries + POI category search) for broader coverage
+- Multi-cuisine parallel search (~150 cuisine-specific queries + POI category search) for broader coverage
 - Filter restaurants by distance (configurable)
 - Search restaurants by name or category
-- Include or exclude cuisine types via a filter sheet
+- Include or exclude cuisine types via a hierarchical filter sheet (continent → country → regional cuisines)
 - Map tab: long-press to set a custom search location and explore restaurants in any area
 - Tap any restaurant to view details, call, or get directions in Apple Maps
 - Random selection with visual feedback
@@ -48,7 +48,8 @@ RestaurantPicker/
 │   │   ├── RestaurantPickerApp.swift
 │   │   └── ContentView.swift
 │   ├── Models/
-│   │   └── Restaurant.swift
+│   │   ├── Restaurant.swift
+│   │   └── CuisineHierarchy.swift
 │   ├── ViewModels/
 │   │   └── RestaurantViewModel.swift
 │   ├── Views/

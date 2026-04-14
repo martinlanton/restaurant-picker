@@ -1,3 +1,80 @@
+# Implementation Log: Hierarchical Cuisine Filter UI + Expanded Queries
+
+**Date**: 2026-04-14
+**Author**: GitHub Copilot
+
+## Overview
+
+The flat chip-grid cuisine filter was replaced with a two-level hierarchical
+filter. Users can now browse cuisines grouped by continent and country, making
+the filter sheet far less crowded while giving access to ~150 cuisine types.
+~40 new cuisine queries were also added to improve restaurant discovery.
+
+## Changes
+
+### RestaurantSearchService.swift — ~40 new cuisine queries
+
+New queries added (grouped by region):
+
+- **Japanese**: Yakitori, Shabu-Shabu
+- **Chinese**: Cantonese, Szechuan, Hotpot, Dumpling (moved from Casual)
+- **Korean**: Korean BBQ, Korean Fried Chicken
+- **Vietnamese**: Pho (already existed), Bánh Mì
+- **South Asian**: Biryani, Sri Lankan
+- **Middle Eastern**: Persian, Israeli, Egyptian, South African
+- **European**: Crêperie, Fish & Chips, Gastropub, Pub, Fondue, Waffles
+- **Americas**: Tacos, Colombian, Argentinian, Venezuelan, Cuban, Diner, Donuts, Wings, Hot Dog (moved from Casual)
+- **Dietary**: Halal, Kosher, Organic
+- **General**: BBQ, Deli, Waffles, Pancakes, Wine Bar
+
+Sections reorganised to reflect actual groupings (e.g. Wings/Hot Dog/Diner/Donuts
+now under Americas rather than Casual & Quick Service).
+
+### CuisineHierarchy.swift — new file in Models/
+
+Defines a purely visual two-level grouping for the filter UI.
+No impact on search logic, filtering, or data model.
+
+Two structs:
+- `CuisineGroup`: `name` + `cuisines: [String]` (leaf labels)
+- `CuisineRegion`: `name` + `isContinent: Bool` + `groups: [CuisineGroup]`
+
+One static `CuisineHierarchy.regions: [CuisineRegion]` array defines the full
+hierarchy:
+
+**Top-level order**: 🌏 Asia, 🇯🇵 Japanese … (all Asian countries), 🌍 Middle East & Africa, Lebanese … (all ME/Africa countries), 🌍 Europe, 🇮🇹 Italian … (all European countries), 🌎 Americas, 🇺🇸 American … (all Americas countries), 🥗 Dietary, 🍽 General.
+
+**Continent leaves** = all group names + all their sub-cuisines (flat).
+**Country leaves** = only that country's regional sub-cuisines.
+**Leaf countries** (no sub-cuisines) = simple toggle rows with no expand arrow.
+
+### CuisineFilterView.swift — complete rewrite
+
+Old: flat chip grid for all available cuisines.
+New: two-level hierarchical filter with:
+
+- **Segmented Include/Exclude picker** at the top of the cuisine section
+- **Expandable rows** (chevron + expand/collapse on tap) for continents and
+  countries that have sub-cuisines
+- **Leaf toggle rows** for countries with no sub-cuisines (e.g. Thai, Greek)
+- **Chip grid** (`FlowLayout`) inside each expanded section
+- **Tri-state indicator** on each expandable row: ○ none / ◐ partial / ✓ all
+- **"All / None" button** on each expandable row to select/deselect all leaves
+- Multiple sections can be open simultaneously; everything stays on one screen
+
+`availableCuisines` parameter removed — the view reads from `CuisineHierarchy`
+directly. `FlowLayout` struct unchanged.
+
+### ContentView.swift
+
+Removed `availableCuisines:` parameter from `CuisineFilterView(...)` call.
+
+## Testing
+
+All 66 tests pass (63 unit + 3 UI). Build succeeded. SwiftFormat + SwiftLint applied.
+
+---
+
 # Implementation Log: Strip Generic Labels from Cuisine Tags
 
 **Date**: 2026-04-12

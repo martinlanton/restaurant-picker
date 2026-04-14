@@ -84,9 +84,9 @@ struct Restaurant: Identifiable, Equatable {
     /// Formatted distance string for display.
     var formattedDistance: String {
         if distance < 1000 {
-            return String(format: "%.0f m", distance)
+            String(format: "%.0f m", distance)
         } else {
-            return String(format: "%.1f km", distance / 1000)
+            String(format: "%.1f km", distance / 1000)
         }
     }
 }

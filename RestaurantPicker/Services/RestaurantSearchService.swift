@@ -26,9 +26,9 @@ actor RestaurantSearchService {
         var errorDescription: String? {
             switch self {
             case let .searchFailed(error):
-                return "Search failed: \(error.localizedDescription)"
+                "Search failed: \(error.localizedDescription)"
             case .noResults:
-                return "No restaurants found in this area."
+                "No restaurants found in this area."
             }
         }
     }
@@ -47,6 +47,7 @@ actor RestaurantSearchService {
         ("food court", "Food Court"),
 
         // MARK: Japanese
+
         ("japanese restaurant", "Japanese"),
         ("sushi restaurant", "Sushi"),
         ("ramen restaurant", "Ramen"),
@@ -55,6 +56,8 @@ actor RestaurantSearchService {
         ("tempura restaurant", "Tempura"),
         ("tonkatsu restaurant", "Tonkatsu"),
         ("yakiniku restaurant", "Yakiniku"),
+        ("yakitori restaurant", "Yakitori"),
+        ("shabu-shabu restaurant", "Shabu-Shabu"),
         ("izakaya", "Izakaya"),
         ("washoku restaurant", "Washoku"),
         ("okonomiyaki restaurant", "Okonomiyaki"),
@@ -66,13 +69,27 @@ actor RestaurantSearchService {
         ("kushikatsu restaurant", "Kushikatsu"),
         ("yoshoku restaurant", "Yoshoku"),
 
-        // MARK: East & Southeast Asian
+        // MARK: Chinese
+
         ("chinese restaurant", "Chinese"),
         ("dim sum restaurant", "Dim Sum"),
+        ("cantonese restaurant", "Cantonese"),
+        ("szechuan restaurant", "Szechuan"),
+        ("hotpot restaurant", "Hotpot"),
+        ("dumpling restaurant", "Dumpling"),
+
+        // MARK: Korean
+
         ("korean restaurant", "Korean"),
+        ("korean bbq restaurant", "Korean BBQ"),
+        ("korean fried chicken restaurant", "Korean Fried Chicken"),
+
+        // MARK: Southeast Asian
+
         ("thai restaurant", "Thai"),
         ("vietnamese restaurant", "Vietnamese"),
         ("pho restaurant", "Pho"),
+        ("banh mi restaurant", "Bánh Mì"),
         ("filipino restaurant", "Filipino"),
         ("indonesian restaurant", "Indonesian"),
         ("malaysian restaurant", "Malaysian"),
@@ -81,35 +98,48 @@ actor RestaurantSearchService {
         ("boba tea", "Boba Tea"),
 
         // MARK: South & Central Asian
+
         ("indian restaurant", "Indian"),
         ("curry restaurant", "Curry"),
+        ("biryani restaurant", "Biryani"),
         ("nepali restaurant", "Nepali"),
         ("pakistani restaurant", "Pakistani"),
+        ("sri lankan restaurant", "Sri Lankan"),
         ("tibetan restaurant", "Tibetan"),
         ("afghan restaurant", "Afghan"),
 
         // MARK: Middle Eastern & African
+
         ("middle eastern restaurant", "Middle Eastern"),
         ("lebanese restaurant", "Lebanese"),
         ("turkish restaurant", "Turkish"),
+        ("persian restaurant", "Persian"),
+        ("israeli restaurant", "Israeli"),
+        ("egyptian restaurant", "Egyptian"),
         ("shawarma restaurant", "Shawarma"),
         ("falafel restaurant", "Falafel"),
         ("kebab restaurant", "Kebab"),
         ("moroccan restaurant", "Moroccan"),
         ("ethiopian restaurant", "Ethiopian"),
+        ("south african restaurant", "South African"),
         ("african restaurant", "African"),
 
         // MARK: European
+
         ("italian restaurant", "Italian"),
         ("pizza restaurant", "Pizza"),
         ("pasta restaurant", "Pasta"),
         ("french restaurant", "French"),
+        ("creperie", "Crêperie"),
         ("spanish restaurant", "Spanish"),
         ("tapas restaurant", "Tapas"),
         ("greek restaurant", "Greek"),
         ("mediterranean restaurant", "Mediterranean"),
         ("german restaurant", "German"),
         ("british restaurant", "British"),
+        ("fish and chips restaurant", "Fish & Chips"),
+        ("gastropub", "Gastropub"),
+        ("pub", "Pub"),
         ("irish restaurant", "Irish"),
         ("portuguese restaurant", "Portuguese"),
         ("scandinavian restaurant", "Scandinavian"),
@@ -117,53 +147,69 @@ actor RestaurantSearchService {
         ("hungarian restaurant", "Hungarian"),
         ("austrian restaurant", "Austrian"),
         ("swiss restaurant", "Swiss"),
+        ("fondue restaurant", "Fondue"),
         ("belgian restaurant", "Belgian"),
         ("dutch restaurant", "Dutch"),
         ("georgian restaurant", "Georgian"),
         ("russian restaurant", "Russian"),
 
         // MARK: Americas
+
         ("american restaurant", "American"),
         ("burger restaurant", "Burger"),
         ("steakhouse", "Steakhouse"),
-        ("mexican restaurant", "Mexican"),
-        ("tex-mex restaurant", "Tex-Mex"),
-        ("brazilian restaurant", "Brazilian"),
-        ("peruvian restaurant", "Peruvian"),
-        ("caribbean restaurant", "Caribbean"),
+        ("diner", "Diner"),
+        ("soul food restaurant", "Soul Food"),
         ("cajun restaurant", "Cajun"),
         ("creole restaurant", "Creole"),
-        ("soul food restaurant", "Soul Food"),
+        ("wings restaurant", "Wings"),
+        ("hot dog restaurant", "Hot Dog"),
+        ("donut shop", "Donuts"),
+        ("mexican restaurant", "Mexican"),
+        ("tacos restaurant", "Tacos"),
+        ("tex-mex restaurant", "Tex-Mex"),
+        ("brazilian restaurant", "Brazilian"),
+        ("colombian restaurant", "Colombian"),
+        ("argentinian restaurant", "Argentinian"),
+        ("venezuelan restaurant", "Venezuelan"),
+        ("cuban restaurant", "Cuban"),
+        ("peruvian restaurant", "Peruvian"),
+        ("caribbean restaurant", "Caribbean"),
         ("hawaiian restaurant", "Hawaiian"),
         ("poke restaurant", "Poke"),
 
-        // MARK: Casual & Quick Service
+        // MARK: Dietary
+
+        ("vegetarian restaurant", "Vegetarian"),
+        ("vegan restaurant", "Vegan"),
+        ("halal restaurant", "Halal"),
+        ("kosher restaurant", "Kosher"),
+        ("organic restaurant", "Organic"),
+
+        // MARK: General
+
         ("seafood restaurant", "Seafood"),
         ("bbq restaurant", "BBQ"),
         ("noodle restaurant", "Noodle"),
-        ("dumpling restaurant", "Dumpling"),
         ("deli", "Deli"),
         ("sandwich shop", "Sandwich"),
-        ("diner", "Diner"),
         ("fried chicken restaurant", "Fried Chicken"),
-        ("wings restaurant", "Wings"),
-        ("hot dog restaurant", "Hot Dog"),
-
-        // MARK: Dietary
-        ("vegetarian restaurant", "Vegetarian"),
-        ("vegan restaurant", "Vegan"),
+        ("waffles restaurant", "Waffles"),
+        ("pancake restaurant", "Pancakes"),
+        ("wine bar", "Wine Bar"),
 
         // MARK: Breakfast & Brunch
+
         ("breakfast restaurant", "Breakfast"),
         ("brunch restaurant", "Brunch"),
 
         // MARK: Café, Bakery & Dessert
+
         ("cafe restaurant", "Café"),
         ("bakery", "Bakery"),
         ("ice cream shop", "Ice Cream"),
         ("dessert restaurant", "Dessert"),
-        ("donut shop", "Donuts"),
-        ("smoothie juice bar", "Juice Bar"),
+        ("smoothie juice bar", "Juice Bar")
     ]
 
     // MARK: - Generic Categories
@@ -179,7 +225,7 @@ actor RestaurantSearchService {
     /// cuisine types that users can filter on.
     static let genericCategories: Set<String> = [
         "Restaurant", "Family Restaurant", "Food Court",
-        "Food Market", "Brewery", "Winery", "Nightlife",
+        "Food Market", "Brewery", "Winery", "Nightlife"
     ]
 
     // MARK: - Public Methods
@@ -205,30 +251,16 @@ actor RestaurantSearchService {
             longitudinalMeters: radius * 2
         )
 
-        // Run all cuisine searches concurrently, plus a POI category search.
-        // Collect cuisine results and POI results separately so cuisine-specific
-        // labels take priority during deduplication.
-        let cuisineResults = await withTaskGroup(
-            of: [(Restaurant, String)].self
-        ) { group in
-            for cuisine in Self.cuisineQueries {
-                group.addTask { [self] in
-                    await self.performSearch(
-                        query: cuisine.query,
-                        label: cuisine.label,
-                        region: region,
-                        location: location,
-                        radius: radius
-                    )
-                }
-            }
-
-            var combined: [(Restaurant, String)] = []
-            for await results in group {
-                combined.append(contentsOf: results)
-            }
-            return combined
-        }
+        // Run cuisine searches in batches to avoid MapKit rate limiting.
+        // Firing all ~150 queries simultaneously causes most to be silently
+        // throttled and return empty results. Batching with a short delay
+        // between groups keeps throughput high while staying within limits.
+        let cuisineResults = await performBatchedSearches(
+            queries: Self.cuisineQueries,
+            region: region,
+            location: location,
+            radius: radius
+        )
 
         // Supplemental: POI category-based search (no natural language).
         // Discovers restaurants that may not match any cuisine keyword.
@@ -296,27 +328,12 @@ actor RestaurantSearchService {
             queriesToRun.append((query: label, label: label))
         }
 
-        let allResults = await withTaskGroup(
-            of: [(Restaurant, String)].self
-        ) { group in
-            for cuisine in queriesToRun {
-                group.addTask { [self] in
-                    await self.performSearch(
-                        query: cuisine.query,
-                        label: cuisine.label,
-                        region: region,
-                        location: location,
-                        radius: radius
-                    )
-                }
-            }
-
-            var combined: [(Restaurant, String)] = []
-            for await results in group {
-                combined.append(contentsOf: results)
-            }
-            return combined
-        }
+        let allResults = await performBatchedSearches(
+            queries: queriesToRun,
+            region: region,
+            location: location,
+            radius: radius
+        )
 
         return Self.deduplicate(allResults)
             .sorted { $0.distance < $1.distance }
@@ -357,19 +374,18 @@ actor RestaurantSearchService {
                     mergedTags.insert(label)
                 }
 
-                let newCategory: String?
-                if !isGenericLabel {
+                let newCategory: String? = if !isGenericLabel {
                     // Incoming label is specific — upgrade if needed
                     if existing.category == nil
                         || genericCategories.contains(
                             existing.category ?? ""
                         ) {
-                        newCategory = label
+                        label
                     } else {
-                        newCategory = existing.category
+                        existing.category
                     }
                 } else {
-                    newCategory = existing.category
+                    existing.category
                 }
 
                 unique[idx] = Restaurant(
@@ -415,6 +431,64 @@ actor RestaurantSearchService {
     }
 
     // MARK: - Search Helpers
+
+    /// Runs search queries in batches to avoid MapKit rate limiting.
+    ///
+    /// Firing all ~150 queries simultaneously causes Apple's servers to
+    /// throttle most of them, returning empty results silently. Running
+    /// queries in groups of `batchSize` with a short `delayNanoseconds`
+    /// pause between groups keeps total throughput high while staying
+    /// within rate limits.
+    ///
+    /// - Parameters:
+    ///   - queries: All `(query, label)` pairs to execute.
+    ///   - region: The MapKit search region.
+    ///   - location: The user's location for distance calculation.
+    ///   - radius: Maximum distance in meters.
+    ///   - batchSize: Number of concurrent requests per batch. Defaults to 10.
+    ///   - delayNanoseconds: Pause between batches. Defaults to 100ms.
+    private func performBatchedSearches(
+        queries: [(query: String, label: String)],
+        region: MKCoordinateRegion,
+        location: CLLocation,
+        radius: Double,
+        batchSize: Int = 10,
+        delayNanoseconds: UInt64 = 100_000_000
+    ) async -> [(Restaurant, String)] {
+        var combined: [(Restaurant, String)] = []
+        let batches = stride(from: 0, to: queries.count, by: batchSize).map {
+            Array(queries[$0 ..< min($0 + batchSize, queries.count)])
+        }
+
+        for batch in batches {
+            let batchResults = await withTaskGroup(
+                of: [(Restaurant, String)].self
+            ) { group in
+                for cuisine in batch {
+                    group.addTask { [self] in
+                        await performSearch(
+                            query: cuisine.query,
+                            label: cuisine.label,
+                            region: region,
+                            location: location,
+                            radius: radius
+                        )
+                    }
+                }
+                var results: [(Restaurant, String)] = []
+                for await r in group {
+                    results.append(contentsOf: r)
+                }
+                return results
+            }
+            combined.append(contentsOf: batchResults)
+            if batch.last?.query != batches.last?.last?.query {
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+        }
+
+        return combined
+    }
 
     /// Performs a single `MKLocalSearch` query and returns results
     /// paired with the cuisine label that triggered the search.

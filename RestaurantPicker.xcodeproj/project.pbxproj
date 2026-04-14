@@ -14,6 +14,7 @@
         30C689C36F780B151AEC63A1 /* RestaurantDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0A9CDA8D76204870047B57 /* RestaurantDetailView.swift */; };
         3C3257E23177BAE8DBD2A6DD /* SelectedRestaurantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217B439E9E3B6932B4099F37 /* SelectedRestaurantView.swift */; };
         40794AFB53477348512269D7 /* Restaurant.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8442B821FF7D8E36577A710 /* Restaurant.swift */; };
+        A1F3C84D2E9B7056C3D10482 /* CuisineHierarchy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D74A1E5C3F8A92E0674D35 /* CuisineHierarchy.swift */; };
         59AAA083C39834545139DE8D /* DecideButtonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB01E38D859DCF8EF144B2F1 /* DecideButtonView.swift */; };
         6DA5C96B439C4AA40242CDB7 /* RestaurantViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1172838D8B26405ABAEBAE65 /* RestaurantViewModel.swift */; };
         7E6F3DE1A6DE3C914EE1C8D4 /* RestaurantViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38F01EE6FE35860665B9B96 /* RestaurantViewModelTests.swift */; };
@@ -63,6 +64,7 @@
         83752E4E484BF69A1D293E4E /* RatingStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RatingStoreTests.swift; sourceTree = "<group>"; };
         9CDED6F440834894CF61D912 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
         C8442B821FF7D8E36577A710 /* Restaurant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Restaurant.swift; sourceTree = "<group>"; };
+        B2D74A1E5C3F8A92E0674D35 /* CuisineHierarchy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CuisineHierarchy.swift; sourceTree = "<group>"; };
         CB01E38D859DCF8EF144B2F1 /* DecideButtonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecideButtonView.swift; sourceTree = "<group>"; };
         D6E481D996A85C6AEEB173A6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
         DE34FE57434FAEF35C8F3F72 /* RestaurantPicker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RestaurantPicker.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -181,6 +183,7 @@
         F1B23562482898A585125BD1 /* Models */ = {
             isa = PBXGroup;
             children = (
+                B2D74A1E5C3F8A92E0674D35 /* CuisineHierarchy.swift */,
                 C8442B821FF7D8E36577A710 /* Restaurant.swift */,
             );
             path = Models;
@@ -312,6 +315,7 @@
                 0B7E4A1F3C9D5E82A1F06B34 /* MapLocationView.swift in Sources */,
                 9C49335F4F238ED5DCE78C77 /* RatingStore.swift in Sources */,
                 40794AFB53477348512269D7 /* Restaurant.swift in Sources */,
+                A1F3C84D2E9B7056C3D10482 /* CuisineHierarchy.swift in Sources */,
                 30C689C36F780B151AEC63A1 /* RestaurantDetailView.swift in Sources */,
                 038F262C08AF2B38BE610F03 /* RestaurantListView.swift in Sources */,
                 93E98F355EBD296DE9F0BF34 /* RestaurantPickerApp.swift in Sources */,
