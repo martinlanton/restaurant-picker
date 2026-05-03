@@ -100,7 +100,7 @@ struct SearchJob {
     /// Pre-split cuisine query batches shared by all jobs (computed once).
     static let allBatches: [[(query: String, label: String)]] = {
         let queries = RestaurantSearchService.cuisineQueries
-        let batchSize = 15
+        let batchSize = RestaurantSearchService.cuisineQueryBatchSize
         return stride(from: 0, to: queries.count, by: batchSize)
             .map { Array(queries[$0 ..< min($0 + batchSize, queries.count)]) }
     }()

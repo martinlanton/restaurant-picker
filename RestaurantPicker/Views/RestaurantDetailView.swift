@@ -81,6 +81,9 @@ struct RestaurantDetailView: View {
 struct AppleMapItemDetailView: View {
     let restaurant: Restaurant
 
+    /// Search radius (in metres) used when resolving a restaurant to an `MKMapItem`.
+    private static let resolveSearchRadius: Double = 100
+
     @State private var resolvedItem: MKMapItem?
     @State private var isLoading = true
 
@@ -113,7 +116,10 @@ struct AppleMapItemDetailView: View {
     private func resolveMapItem() async {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = restaurant.name
-        request.region = MKCoordinateRegion(center: restaurant.coordinate, radius: 100)
+        request.region = MKCoordinateRegion(
+            center: restaurant.coordinate,
+            radius: Self.resolveSearchRadius
+        )
         request.resultTypes = .pointOfInterest
 
         let search = MKLocalSearch(request: request)
@@ -123,8 +129,9 @@ struct AppleMapItemDetailView: View {
             let target = restaurant.coordinate.asLocation
             resolvedItem = response.mapItems.first { item in
                 guard let name = item.name else { return false }
-                return name.lowercased() == restaurant.name.lowercased() &&
-                    target.distance(from: item.placemark.coordinate.asLocation) < 100
+                return name.lowercased() == restaurant.name.lowercased()
+                    && target.distance(from: item.placemark.coordinate.asLocation)
+                    < Self.resolveSearchRadius
             } ?? response.mapItems.first
         } catch {
             let placemark = MKPlacemark(coordinate: restaurant.coordinate)

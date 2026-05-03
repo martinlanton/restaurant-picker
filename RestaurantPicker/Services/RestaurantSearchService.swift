@@ -243,6 +243,12 @@ actor RestaurantSearchService: RestaurantSearching {
     /// the same purpose, ensuring a single source of truth for this threshold.
     static let coordinateProximityThreshold: Double = 0.0005
 
+    /// Number of cuisine queries executed per batch.
+    static let cuisineQueryBatchSize = 15
+
+    /// Pause inserted between consecutive cuisine-search batches (50 ms).
+    private static let cuisineSearchBatchDelayNanoseconds: UInt64 = 50_000_000
+
     // MARK: - Internal Types (now top-level — see RestaurantSearchTypes.swift)
 
     // MARK: - Private Types
@@ -450,79 +456,43 @@ actor RestaurantSearchService: RestaurantSearching {
         let childRadius = node.radius * 0.5
         let offsetDistance = node.radius * 0.5
 
-        // Fire N/S/E/W concurrently (max 4 simultaneous queries)
-        let cardinalResults: [(Cardinal, SearchResult)] =
-            await withTaskGroup(of: (Cardinal, SearchResult).self) { group in
-                for dir in Cardinal.allCases {
-                    group.addTask { [self] in
-                        let centre = Self.offset(node.centre, direction: dir, metres: offsetDistance)
-                        let region = MKCoordinateRegion(center: centre, radius: childRadius)
-                        let result = await performSearch(
-                            query: node.query,
-                            label: node.label,
-                            region: region,
-                            location: userLocation,
-                            radius: maxRadius
-                        )
-                        return (dir, result)
-                    }
-                }
-                var collected: [(Cardinal, SearchResult)] = []
-                for await item in group { collected.append(item) }
-                return collected
-            }
+        let cardinalResults = await runCardinalSearches(
+            for: node,
+            childRadius: childRadius,
+            offsetDistance: offsetDistance,
+            userLocation: userLocation,
+            maxRadius: maxRadius
+        )
 
-        var accumulated: [(Restaurant, String)] = []
-        var saturatedCardinals: Set<Cardinal> = []
-
-        for (dir, result) in cardinalResults {
-            accumulated.append(contentsOf: result.results)
-            if result.rawCount >= Self.mkLocalSearchResultCap {
-                saturatedCardinals.insert(dir)
-            }
-        }
-
-        // Diagonal fill: search between each pair of adjacent saturated cardinals
-        var diagonalPoints: [(Diagonal, CLLocationCoordinate2D)] = []
-        let saturatedList = Array(saturatedCardinals)
-        for i in 0 ..< saturatedList.count {
-            for j in (i + 1) ..< saturatedList.count {
-                if let diag = Self.diagonal(between: saturatedList[i], and: saturatedList[j]) {
-                    let centre = Self.offset(node.centre, diagonal: diag, metres: offsetDistance)
-                    diagonalPoints.append((diag, centre))
-                }
-            }
-        }
+        var accumulated = cardinalResults.flatMap(\.result.results)
+        let saturatedCardinals = Set(
+            cardinalResults
+                .filter { $0.result.rawCount >= Self.mkLocalSearchResultCap }
+                .map(\.direction)
+        )
+        let diagonalPoints = Self.buildDiagonalPoints(
+            from: saturatedCardinals,
+            node: node,
+            offsetDistance: offsetDistance
+        )
 
         var childNodes: [ScatterNode] = []
 
         if !diagonalPoints.isEmpty {
-            let diagResults: [SearchResult] =
-                await withTaskGroup(of: SearchResult.self) { group in
-                    for (_, centre) in diagonalPoints {
-                        group.addTask { [self] in
-                            let region = MKCoordinateRegion(center: centre, radius: childRadius)
-                            return await performSearch(
-                                query: node.query,
-                                label: node.label,
-                                region: region,
-                                location: userLocation,
-                                radius: maxRadius
-                            )
-                        }
-                    }
-                    var collected: [SearchResult] = []
-                    for await r in group { collected.append(r) }
-                    return collected
-                }
-
+            let diagResults = await runDiagonalSearches(
+                at: diagonalPoints,
+                node: node,
+                childRadius: childRadius,
+                userLocation: userLocation,
+                maxRadius: maxRadius
+            )
             for (idx, result) in diagResults.enumerated() {
                 accumulated.append(contentsOf: result.results)
                 if result.rawCount >= Self.mkLocalSearchResultCap {
                     childNodes.append(ScatterNode(
                         query: node.query,
                         label: node.label,
-                        centre: diagonalPoints[idx].1,
+                        centre: diagonalPoints[idx].centre,
                         radius: childRadius,
                         depth: node.depth + 1
                     ))
@@ -543,6 +513,83 @@ actor RestaurantSearchService: RestaurantSearching {
         }
 
         return ScatterNodeResult(results: accumulated, childNodes: childNodes)
+    }
+
+    // MARK: - Scatter Helpers
+
+    /// Runs the four cardinal (N/S/E/W) searches for a scatter node concurrently.
+    private func runCardinalSearches(
+        for node: ScatterNode,
+        childRadius: Double,
+        offsetDistance: Double,
+        userLocation: CLLocation,
+        maxRadius: Double
+    ) async -> [(direction: Cardinal, result: SearchResult)] {
+        await withTaskGroup(of: (Cardinal, SearchResult).self) { group in
+            for dir in Cardinal.allCases {
+                group.addTask { [self] in
+                    let centre = Self.offset(node.centre, direction: dir, metres: offsetDistance)
+                    let region = MKCoordinateRegion(center: centre, radius: childRadius)
+                    let result = await performSearch(
+                        query: node.query,
+                        label: node.label,
+                        region: region,
+                        location: userLocation,
+                        radius: maxRadius
+                    )
+                    return (dir, result)
+                }
+            }
+            var collected: [(Cardinal, SearchResult)] = []
+            for await item in group { collected.append(item) }
+            return collected
+        }
+    }
+
+    /// Returns the diagonal fill points between each pair of adjacent saturated cardinals.
+    private static func buildDiagonalPoints(
+        from saturatedCardinals: Set<Cardinal>,
+        node: ScatterNode,
+        offsetDistance: Double
+    ) -> [(diagonal: Diagonal, centre: CLLocationCoordinate2D)] {
+        let list = Array(saturatedCardinals)
+        var points: [(Diagonal, CLLocationCoordinate2D)] = []
+        for i in 0 ..< list.count {
+            for j in (i + 1) ..< list.count {
+                if let diag = diagonal(between: list[i], and: list[j]) {
+                    let centre = offset(node.centre, diagonal: diag, metres: offsetDistance)
+                    points.append((diag, centre))
+                }
+            }
+        }
+        return points
+    }
+
+    /// Runs diagonal searches concurrently for each fill point.
+    private func runDiagonalSearches(
+        at points: [(diagonal: Diagonal, centre: CLLocationCoordinate2D)],
+        node: ScatterNode,
+        childRadius: Double,
+        userLocation: CLLocation,
+        maxRadius: Double
+    ) async -> [SearchResult] {
+        await withTaskGroup(of: SearchResult.self) { group in
+            for (_, centre) in points {
+                group.addTask { [self] in
+                    let region = MKCoordinateRegion(center: centre, radius: childRadius)
+                    return await performSearch(
+                        query: node.query,
+                        label: node.label,
+                        region: region,
+                        location: userLocation,
+                        radius: maxRadius
+                    )
+                }
+            }
+            var collected: [SearchResult] = []
+            for await r in group { collected.append(r) }
+            return collected
+        }
     }
 
     /// Executes one batch of cuisine queries concurrently against the wide region.
@@ -612,9 +659,8 @@ actor RestaurantSearchService: RestaurantSearching {
         }
 
         var allResults: [(Restaurant, String)] = []
-        let batchSize = 15
-        let batches = stride(from: 0, to: queriesToRun.count, by: batchSize)
-            .map { Array(queriesToRun[$0 ..< min($0 + batchSize, queriesToRun.count)]) }
+        let batches = stride(from: 0, to: queriesToRun.count, by: Self.cuisineQueryBatchSize)
+            .map { Array(queriesToRun[$0 ..< min($0 + Self.cuisineQueryBatchSize, queriesToRun.count)]) }
 
         for (idx, batch) in batches.enumerated() {
             let batchResult = await executeFocusedBatch(
@@ -625,7 +671,7 @@ actor RestaurantSearchService: RestaurantSearching {
             )
             allResults.append(contentsOf: batchResult.results)
             if idx < batches.count - 1 {
-                try? await Task.sleep(nanoseconds: 50_000_000)
+                try? await Task.sleep(nanoseconds: Self.cuisineSearchBatchDelayNanoseconds)
             }
         }
 

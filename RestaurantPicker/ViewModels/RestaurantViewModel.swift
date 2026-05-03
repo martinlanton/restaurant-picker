@@ -118,6 +118,14 @@ final class RestaurantViewModel: ObservableObject {
     /// The search radius used for network calls. Always 10 km; UI filter applied client-side.
     private static let networkSearchRadius: Double = SearchOrchestrator.networkRadius
 
+    // MARK: - Timing Constants
+
+    /// How long to wait for location authorization after requesting it (0.5 s).
+    private static let authorizationWaitNanoseconds: UInt64 = 500_000_000
+
+    /// How long to wait for the first GPS fix after requesting it (2.0 s).
+    private static let locationFixWaitNanoseconds: UInt64 = 2_000_000_000
+
     // MARK: - Initialization
 
     /// Creates a new RestaurantViewModel with dependencies.
@@ -170,37 +178,9 @@ final class RestaurantViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        let location: CLLocation
-
-        if let override = locationManager.overrideLocation {
-            location = override
-        } else {
-            if locationManager.authorizationStatus == .notDetermined {
-                locationManager.requestAuthorization()
-                try? await Task.sleep(nanoseconds: 500_000_000)
-            }
-
-            guard locationManager.isAuthorized else {
-                if locationManager.isDenied {
-                    errorMessage = "Location access denied. Please enable location services in Settings."
-                } else {
-                    errorMessage = "Location access not yet authorized."
-                }
-                isLoading = false
-                return
-            }
-
-            if locationManager.currentLocation == nil {
-                locationManager.requestLocation()
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-            }
-
-            guard let gpsLocation = locationManager.currentLocation else {
-                errorMessage = "Unable to determine your location."
-                isLoading = false
-                return
-            }
-            location = gpsLocation
+        guard let location = await resolveLocation() else {
+            isLoading = false
+            return
         }
 
         let radius = Self.networkSearchRadius
@@ -222,6 +202,40 @@ final class RestaurantViewModel: ObservableObject {
             focusRadius: focusRadius
         )
         // isLoading flips to false when the first update for currentSearchJobID arrives
+    }
+
+    /// Resolves the effective search location.
+    ///
+    /// Returns the override location immediately if set. Otherwise requests
+    /// authorization if needed, waits for a GPS fix, and returns the device location.
+    /// Sets `errorMessage` and returns `nil` on failure.
+    private func resolveLocation() async -> CLLocation? {
+        if let override = locationManager.overrideLocation {
+            return override
+        }
+
+        if locationManager.authorizationStatus == .notDetermined {
+            locationManager.requestAuthorization()
+            try? await Task.sleep(nanoseconds: Self.authorizationWaitNanoseconds)
+        }
+
+        guard locationManager.isAuthorized else {
+            errorMessage = locationManager.isDenied
+                ? "Location access denied. Please enable location services in Settings."
+                : "Location access not yet authorized."
+            return nil
+        }
+
+        if locationManager.currentLocation == nil {
+            locationManager.requestLocation()
+            try? await Task.sleep(nanoseconds: Self.locationFixWaitNanoseconds)
+        }
+
+        guard let gpsLocation = locationManager.currentLocation else {
+            errorMessage = "Unable to determine your location."
+            return nil
+        }
+        return gpsLocation
     }
 
     /// Selects a random restaurant from the filtered list.
@@ -531,43 +545,55 @@ final class RestaurantViewModel: ObservableObject {
             }
     }
 
-    /// Applies the distance, cuisine, and rating filters to the restaurants list.
+    /// Applies the distance, cuisine, rating, and text filters to the restaurants list.
     private func applyFilter() {
-        var result = restaurants
-
-        if let radius = filterRadius {
-            result = result.filter { $0.distance <= radius }
+        let searchQuery = normalizedSearchQuery()
+        filteredRestaurants = restaurants.filter { restaurant in
+            passesDistanceFilter(restaurant)
+                && passesCuisineIncludeFilter(restaurant)
+                && passesCuisineExcludeFilter(restaurant)
+                && passesRatingFilter(restaurant)
+                && passesSearchFilter(restaurant, query: searchQuery)
         }
+    }
 
-        if !selectedCuisines.isEmpty {
-            result = result.filter { !$0.cuisineTags.isDisjoint(with: selectedCuisines) }
-        }
-
-        if !excludedCuisines.isEmpty {
-            result = result.filter { $0.cuisineTags.isDisjoint(with: excludedCuisines) }
-        }
-
-        if let minRating = minimumRating {
-            if minRating == -1 {
-                result = result.filter { ratingStore.rating(for: $0) == nil }
-            } else {
-                result = result.filter { restaurant in
-                    guard let rating = ratingStore.rating(for: restaurant) else { return false }
-                    return rating >= minRating
-                }
-            }
-        }
-
+    /// Returns the normalized search query, or `nil` when the search field is blank.
+    private func normalizedSearchQuery() -> String? {
         let trimmed = searchText.trimmingCharacters(in: .whitespaces)
-        if !trimmed.isEmpty {
-            let query = Self.normalizeForSearch(trimmed)
-            result = result.filter { restaurant in
-                Self.normalizeForSearch(restaurant.name).contains(query) ||
-                    (restaurant.category.map { Self.normalizeForSearch($0).contains(query) } ?? false)
-            }
-        }
+        return trimmed.isEmpty ? nil : Self.normalizeForSearch(trimmed)
+    }
 
-        filteredRestaurants = result
+    /// Returns `true` when the restaurant is within the selected distance radius.
+    private func passesDistanceFilter(_ restaurant: Restaurant) -> Bool {
+        guard let radius = filterRadius else { return true }
+        return restaurant.distance <= radius
+    }
+
+    /// Returns `true` when the restaurant matches at least one of the included cuisines
+    /// (or when no include filter is active).
+    private func passesCuisineIncludeFilter(_ restaurant: Restaurant) -> Bool {
+        selectedCuisines.isEmpty || !restaurant.cuisineTags.isDisjoint(with: selectedCuisines)
+    }
+
+    /// Returns `true` when the restaurant does not belong to any excluded cuisine.
+    private func passesCuisineExcludeFilter(_ restaurant: Restaurant) -> Bool {
+        excludedCuisines.isEmpty || restaurant.cuisineTags.isDisjoint(with: excludedCuisines)
+    }
+
+    /// Returns `true` when the restaurant meets the minimum rating requirement.
+    private func passesRatingFilter(_ restaurant: Restaurant) -> Bool {
+        guard let minRating = minimumRating else { return true }
+        if minRating == -1 { return ratingStore.rating(for: restaurant) == nil }
+        guard let rating = ratingStore.rating(for: restaurant) else { return false }
+        return rating >= minRating
+    }
+
+    /// Returns `true` when the restaurant's name or category contains `query`.
+    /// Always returns `true` when `query` is `nil`.
+    private func passesSearchFilter(_ restaurant: Restaurant, query: String?) -> Bool {
+        guard let query else { return true }
+        return Self.normalizeForSearch(restaurant.name).contains(query)
+            || (restaurant.category.map { Self.normalizeForSearch($0).contains(query) } ?? false)
     }
 
     /// Selects a random restaurant weighted by user rating.
