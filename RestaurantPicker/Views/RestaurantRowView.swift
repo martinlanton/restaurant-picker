@@ -53,10 +53,7 @@ struct RestaurantRowView: View {
     // MARK: - Private
 
     private var ratingBinding: Binding<Int?> {
-        Binding(
-            get: { ratingStore.rating(for: restaurant) },
-            set: { ratingStore.setRating($0, for: restaurant) }
-        )
+        ratingStore.ratingBinding(for: restaurant)
     }
 }
 

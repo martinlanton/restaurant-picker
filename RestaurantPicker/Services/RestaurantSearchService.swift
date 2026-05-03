@@ -269,8 +269,7 @@ actor RestaurantSearchService: RestaurantSearching {
         direction: Cardinal,
         metres: Double
     ) -> CLLocationCoordinate2D {
-        let latDelta = metres / 111_320.0
-        let lngDelta = metres / (111_320.0 * cos(coord.latitude * .pi / 180.0))
+        let (latDelta, lngDelta) = coordinateDeltas(metres: metres, latitude: coord.latitude)
         switch direction {
         case .north: return CLLocationCoordinate2D(latitude: coord.latitude + latDelta, longitude: coord.longitude)
         case .south: return CLLocationCoordinate2D(latitude: coord.latitude - latDelta, longitude: coord.longitude)
@@ -285,9 +284,7 @@ actor RestaurantSearchService: RestaurantSearching {
         diagonal: Diagonal,
         metres: Double
     ) -> CLLocationCoordinate2D {
-        let component = metres / sqrt(2.0)
-        let latDelta = component / 111_320.0
-        let lngDelta = component / (111_320.0 * cos(coord.latitude * .pi / 180.0))
+        let (latDelta, lngDelta) = coordinateDeltas(metres: metres / sqrt(2.0), latitude: coord.latitude)
         switch diagonal {
         case .northEast: return CLLocationCoordinate2D(
                 latitude: coord.latitude + latDelta,
@@ -306,6 +303,19 @@ actor RestaurantSearchService: RestaurantSearching {
                 longitude: coord.longitude - lngDelta
             )
         }
+    }
+
+    /// Returns the latitude and longitude deltas (in degrees) for a given
+    /// distance in metres at the specified latitude.
+    ///
+    /// - Parameters:
+    ///   - metres: Distance to convert.
+    ///   - latitude: Latitude at which to compute the longitude scaling.
+    /// - Returns: A `(latDelta, lngDelta)` tuple in degrees.
+    private static func coordinateDeltas(metres: Double, latitude: Double) -> (Double, Double) {
+        let latDelta = metres / 111_320.0
+        let lngDelta = metres / (111_320.0 * cos(latitude * .pi / 180.0))
+        return (latDelta, lngDelta)
     }
 
     /// Returns the diagonal direction between two orthogonally adjacent cardinals, if any.
@@ -391,11 +401,7 @@ actor RestaurantSearchService: RestaurantSearching {
             let response = try await search.start()
             return response.mapItems.compactMap { item in
                 guard let name = item.name else { return nil }
-                let itemLoc = CLLocation(
-                    latitude: item.placemark.coordinate.latitude,
-                    longitude: item.placemark.coordinate.longitude
-                )
-                let distance = location.distance(from: itemLoc)
+                let distance = location.distance(from: item.placemark.coordinate.asLocation)
                 guard distance <= networkRadius else { return nil }
                 let label = Self.poiCategoryLabel(for: item.pointOfInterestCategory)
                 let displayCat = Self.displayName(for: item.pointOfInterestCategory)
@@ -450,11 +456,7 @@ actor RestaurantSearchService: RestaurantSearching {
                 for dir in Cardinal.allCases {
                     group.addTask { [self] in
                         let centre = Self.offset(node.centre, direction: dir, metres: offsetDistance)
-                        let region = MKCoordinateRegion(
-                            center: centre,
-                            latitudinalMeters: childRadius * 2,
-                            longitudinalMeters: childRadius * 2
-                        )
+                        let region = MKCoordinateRegion(center: centre, radius: childRadius)
                         let result = await performSearch(
                             query: node.query,
                             label: node.label,
@@ -499,11 +501,7 @@ actor RestaurantSearchService: RestaurantSearching {
                 await withTaskGroup(of: SearchResult.self) { group in
                     for (_, centre) in diagonalPoints {
                         group.addTask { [self] in
-                            let region = MKCoordinateRegion(
-                                center: centre,
-                                latitudinalMeters: childRadius * 2,
-                                longitudinalMeters: childRadius * 2
-                            )
+                            let region = MKCoordinateRegion(center: centre, radius: childRadius)
                             return await performSearch(
                                 query: node.query,
                                 label: node.label,
@@ -601,11 +599,7 @@ actor RestaurantSearchService: RestaurantSearching {
         near location: CLLocation,
         radius: Double
     ) async -> [Restaurant] {
-        let region = MKCoordinateRegion(
-            center: location.coordinate,
-            latitudinalMeters: radius * 2,
-            longitudinalMeters: radius * 2
-        )
+        let region = MKCoordinateRegion(center: location.coordinate, radius: radius)
 
         var queriesToRun: [(query: String, label: String)] = []
         for label in cuisineLabels {
@@ -749,11 +743,7 @@ actor RestaurantSearchService: RestaurantSearching {
             let rawCount = response.mapItems.count
             let filtered = response.mapItems.compactMap { item -> (Restaurant, String)? in
                 guard let name = item.name else { return nil }
-                let itemLoc = CLLocation(
-                    latitude: item.placemark.coordinate.latitude,
-                    longitude: item.placemark.coordinate.longitude
-                )
-                let distance = location.distance(from: itemLoc)
+                let distance = location.distance(from: item.placemark.coordinate.asLocation)
                 guard distance <= radius else { return nil }
                 let displayCat = Self.displayName(for: item.pointOfInterestCategory)
                 let restaurant = Restaurant(

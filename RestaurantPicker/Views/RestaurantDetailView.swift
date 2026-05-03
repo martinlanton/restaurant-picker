@@ -70,10 +70,7 @@ struct RestaurantDetailView: View {
     // MARK: - Private Methods
 
     private var ratingBinding: Binding<Int?> {
-        Binding(
-            get: { ratingStore.rating(for: restaurant) },
-            set: { ratingStore.setRating($0, for: restaurant) }
-        )
+        ratingStore.ratingBinding(for: restaurant)
     }
 }
 
@@ -116,29 +113,18 @@ struct AppleMapItemDetailView: View {
     private func resolveMapItem() async {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = restaurant.name
-        request.region = MKCoordinateRegion(
-            center: restaurant.coordinate,
-            latitudinalMeters: 200,
-            longitudinalMeters: 200
-        )
+        request.region = MKCoordinateRegion(center: restaurant.coordinate, radius: 100)
         request.resultTypes = .pointOfInterest
 
         let search = MKLocalSearch(request: request)
 
         do {
             let response = try await search.start()
-            let target = CLLocation(
-                latitude: restaurant.coordinate.latitude,
-                longitude: restaurant.coordinate.longitude
-            )
+            let target = restaurant.coordinate.asLocation
             resolvedItem = response.mapItems.first { item in
                 guard let name = item.name else { return false }
-                let itemLocation = CLLocation(
-                    latitude: item.placemark.coordinate.latitude,
-                    longitude: item.placemark.coordinate.longitude
-                )
                 return name.lowercased() == restaurant.name.lowercased() &&
-                    target.distance(from: itemLocation) < 100
+                    target.distance(from: item.placemark.coordinate.asLocation) < 100
             } ?? response.mapItems.first
         } catch {
             let placemark = MKPlacemark(coordinate: restaurant.coordinate)

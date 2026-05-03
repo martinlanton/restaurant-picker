@@ -91,9 +91,7 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
-                        Task {
-                            await viewModel.refresh()
-                        }
+                        requestRefresh()
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
@@ -207,9 +205,7 @@ struct ContentView: View {
                 .foregroundColor(.secondary)
                 .padding(.horizontal)
             Button("Try Again") {
-                Task {
-                    await viewModel.refresh()
-                }
+                requestRefresh()
             }
             .buttonStyle(.borderedProminent)
             Spacer()
@@ -235,6 +231,13 @@ struct ContentView: View {
             restaurants: viewModel.filteredRestaurants,
             selectedRestaurant: viewModel.selectedRestaurant
         )
+    }
+
+    /// Schedules a refresh on the view model, encapsulating the `Task` boilerplate.
+    private func requestRefresh() {
+        Task {
+            await viewModel.refresh()
+        }
     }
 }
 

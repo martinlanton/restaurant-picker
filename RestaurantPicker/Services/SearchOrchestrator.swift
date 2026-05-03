@@ -87,20 +87,12 @@ struct SearchJob {
 
     /// Focused `MKCoordinateRegion` sized to `focusRadius`.
     var focusedRegion: MKCoordinateRegion {
-        MKCoordinateRegion(
-            center: location.coordinate,
-            latitudinalMeters: focusRadius * 2,
-            longitudinalMeters: focusRadius * 2
-        )
+        MKCoordinateRegion(center: location.coordinate, radius: focusRadius)
     }
 
     /// Wide `MKCoordinateRegion` sized to `networkRadius`.
     var wideRegion: MKCoordinateRegion {
-        MKCoordinateRegion(
-            center: location.coordinate,
-            latitudinalMeters: networkRadius * 2,
-            longitudinalMeters: networkRadius * 2
-        )
+        MKCoordinateRegion(center: location.coordinate, radius: networkRadius)
     }
 
     // MARK: Phase state helpers

@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import SwiftUI
 
 /// A local-only store for user restaurant ratings.
 ///
@@ -61,6 +62,20 @@ final class RatingStore: ObservableObject {
             defaults.removeObject(forKey: key)
         }
         objectWillChange.send()
+    }
+
+    /// Returns a SwiftUI `Binding` that reads and writes the rating for a restaurant.
+    ///
+    /// Use this to eliminate the duplicated `ratingBinding` computed property
+    /// that would otherwise appear in every view displaying a `StarRatingView`.
+    ///
+    /// - Parameter restaurant: The restaurant to bind the rating to.
+    /// - Returns: A `Binding<Int?>` backed by this store.
+    func ratingBinding(for restaurant: Restaurant) -> Binding<Int?> {
+        Binding(
+            get: { self.rating(for: restaurant) },
+            set: { self.setRating($0, for: restaurant) }
+        )
     }
 
     // MARK: - Key Generation
