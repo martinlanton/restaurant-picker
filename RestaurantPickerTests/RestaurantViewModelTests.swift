@@ -36,7 +36,7 @@ final class RestaurantViewModelTests: XCTestCase {
             cuisineTags: ["Japanese"],
             phoneNumber: nil,
             url: nil
-        ),
+        )
     ]
 
     // MARK: - Filter Tests
@@ -258,7 +258,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 category: nil,
                 phoneNumber: nil,
                 url: nil
-            ),
+            )
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -282,7 +282,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 category: nil,
                 phoneNumber: nil,
                 url: nil
-            ),
+            )
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -382,7 +382,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 category: nil,
                 phoneNumber: nil,
                 url: nil
-            ),
+            )
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -558,7 +558,7 @@ final class RestaurantViewModelTests: XCTestCase {
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let restaurants = [
             sampleRestaurants[0], // Thai Place
-            sampleRestaurants[1], // Pizza Shop
+            sampleRestaurants[1] // Pizza Shop
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants, ratingStore: ratingStore)
         viewModel.filterRadius = nil
@@ -812,7 +812,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 phoneNumber: nil,
                 url: nil
             ),
-            sampleRestaurants[1],
+            sampleRestaurants[1]
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -838,7 +838,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 phoneNumber: nil,
                 url: nil
             ),
-            sampleRestaurants[1],
+            sampleRestaurants[1]
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -858,6 +858,299 @@ final class RestaurantViewModelTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         return defaults
+    }
+}
+
+// MARK: - mergeRestaurantLists Tests
+
+/// Tests for `RestaurantViewModel.mergeRestaurantLists(existing:new:)`.
+///
+/// These tests run entirely in memory — no networking, no location services.
+@MainActor
+final class MergeRestaurantListsTests: XCTestCase {
+    // MARK: - Helpers
+
+    private func makeRestaurant(
+        name: String,
+        lat: Double = 40.7128,
+        lon: Double = -74.0060,
+        distance: Double = 500
+    ) -> Restaurant {
+        Restaurant(
+            id: UUID(),
+            name: name,
+            coordinate: .init(latitude: lat, longitude: lon),
+            distance: distance,
+            category: nil,
+            cuisineTags: [],
+            phoneNumber: nil,
+            url: nil
+        )
+    }
+
+    // MARK: - Tests
+
+    func testMergeWithEmptyNewListReturnsExisting() {
+        // Arrange
+        let existing = [makeRestaurant(name: "Thai Place")]
+
+        // Act
+        let result = RestaurantViewModel.mergeRestaurantLists(existing: existing, new: [])
+
+        // Assert
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result.first?.name, "Thai Place")
+    }
+
+    func testMergeWithEmptyExistingAddsAllNew() {
+        // Arrange
+        let new = [makeRestaurant(name: "Pizza Shop"), makeRestaurant(name: "Sushi Bar", lat: 40.72)]
+
+        // Act
+        let result = RestaurantViewModel.mergeRestaurantLists(existing: [], new: new)
+
+        // Assert
+        XCTAssertEqual(result.count, 2)
+    }
+
+    func testMergeDeduplicatesByNameAndProximity() {
+        // Arrange — same name + same coords in both lists → should not duplicate
+        let existing = [makeRestaurant(name: "Thai Place")]
+        let new = [makeRestaurant(name: "Thai Place")] // identical coord (default)
+
+        // Act
+        let result = RestaurantViewModel.mergeRestaurantLists(existing: existing, new: new)
+
+        // Assert — only one entry
+        XCTAssertEqual(result.count, 1)
+    }
+
+    func testMergeKeepsDifferentLocationsWithSameName() {
+        // Arrange — chain: same name at different coordinates
+        let existing = [makeRestaurant(name: "Starbucks", lat: 40.71, lon: -74.00)]
+        let new = [makeRestaurant(name: "Starbucks", lat: 41.00, lon: -74.00)] // far away
+
+        // Act
+        let result = RestaurantViewModel.mergeRestaurantLists(existing: existing, new: new)
+
+        // Assert — both branches of the chain kept
+        XCTAssertEqual(result.count, 2)
+    }
+
+    func testMergeResultIsSortedByDistanceAscending() {
+        // Arrange
+        let existing = [makeRestaurant(name: "Far Place", distance: 3000)]
+        let new = [makeRestaurant(name: "Near Place", lat: 40.72, distance: 200)]
+
+        // Act
+        let result = RestaurantViewModel.mergeRestaurantLists(existing: existing, new: new)
+
+        // Assert
+        XCTAssertEqual(result.first?.name, "Near Place")
+        XCTAssertEqual(result.last?.name, "Far Place")
+    }
+
+    func testMergeAddsTrulyNewRestaurants() {
+        // Arrange
+        let existing = [makeRestaurant(name: "Thai Place")]
+        let new = [makeRestaurant(name: "Pizza Shop", lat: 40.72)]
+
+        // Act
+        let result = RestaurantViewModel.mergeRestaurantLists(existing: existing, new: new)
+
+        // Assert
+        XCTAssertEqual(result.count, 2)
+        let names = Set(result.map(\.name))
+        XCTAssertTrue(names.contains("Thai Place"))
+        XCTAssertTrue(names.contains("Pizza Shop"))
+    }
+}
+
+// MARK: - handleOrchestratorUpdate Tests
+
+/// Tests for `RestaurantViewModel.handleOrchestratorUpdate(_:)`.
+///
+/// `handleOrchestratorUpdate` is driven directly (without a running orchestrator)
+/// by setting `currentSearchJobID` and calling the method with a synthetic
+/// `OrchestratorUpdate`.
+@MainActor
+final class HandleOrchestratorUpdateTests: XCTestCase {
+    // MARK: - Helpers
+
+    private let baseLocation = CLLocation(latitude: 40.7128, longitude: -74.0060)
+
+    private func makeSampleRestaurants() -> [Restaurant] {
+        [
+            Restaurant(
+                id: UUID(),
+                name: "Thai Place",
+                coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+                distance: 300,
+                category: "Thai",
+                cuisineTags: ["Thai"],
+                phoneNumber: nil,
+                url: nil
+            ),
+            Restaurant(
+                id: UUID(),
+                name: "Pizza Shop",
+                coordinate: .init(latitude: 40.72, longitude: -74.006),
+                distance: 1500,
+                category: "Italian",
+                cuisineTags: ["Italian"],
+                phoneNumber: nil,
+                url: nil
+            ),
+        ]
+    }
+
+    private func makeUpdate(
+        jobID: UUID,
+        snapshot: [Restaurant] = [],
+        isComplete: Bool = false,
+        location: CLLocation? = nil
+    ) -> OrchestratorUpdate {
+        OrchestratorUpdate(
+            jobID: jobID,
+            location: location ?? CLLocation(latitude: 40.7128, longitude: -74.0060),
+            snapshot: snapshot,
+            isJobComplete: isComplete
+        )
+    }
+
+    // MARK: - Current-Job Tests
+
+    func testUpdateForCurrentJobSetsRestaurants() {
+        // Arrange
+        let vm = RestaurantViewModel(restaurants: [])
+        let jobID = UUID()
+        vm.currentSearchJobID = jobID
+        vm.isLoading = true
+        let snapshot = makeSampleRestaurants()
+
+        // Act
+        vm.handleOrchestratorUpdate(makeUpdate(jobID: jobID, snapshot: snapshot))
+
+        // Assert
+        XCTAssertEqual(vm.restaurants.count, snapshot.count)
+    }
+
+    func testUpdateForCurrentJobClearsErrorMessage() {
+        // Arrange
+        let vm = RestaurantViewModel(restaurants: [])
+        let jobID = UUID()
+        vm.currentSearchJobID = jobID
+        vm.errorMessage = "Previous error"
+
+        // Act
+        vm.handleOrchestratorUpdate(makeUpdate(jobID: jobID, snapshot: makeSampleRestaurants()))
+
+        // Assert
+        XCTAssertNil(vm.errorMessage)
+    }
+
+    func testFirstUpdateForCurrentJobSetsIsLoadingFalseAndIsLoadingMoreTrue() {
+        // Arrange
+        let vm = RestaurantViewModel(restaurants: [])
+        let jobID = UUID()
+        vm.currentSearchJobID = jobID
+        vm.isLoading = true
+
+        // Act
+        vm.handleOrchestratorUpdate(makeUpdate(jobID: jobID, snapshot: makeSampleRestaurants()))
+
+        // Assert
+        XCTAssertFalse(vm.isLoading, "isLoading should flip to false after first update")
+        XCTAssertTrue(vm.isLoadingMore, "isLoadingMore should become true while search is still running")
+    }
+
+    func testCompleteUpdateForCurrentJobClearsIsLoadingMore() {
+        // Arrange — simulate that the first update already cleared isLoading
+        let vm = RestaurantViewModel(restaurants: [])
+        let jobID = UUID()
+        vm.currentSearchJobID = jobID
+        vm.isLoadingMore = true
+
+        // Act — complete update
+        vm.handleOrchestratorUpdate(
+            makeUpdate(jobID: jobID, snapshot: makeSampleRestaurants(), isComplete: true)
+        )
+
+        // Assert
+        XCTAssertFalse(vm.isLoadingMore, "isLoadingMore should be false once the job is complete")
+    }
+
+    func testCompleteUpdateWithEmptySnapshotSetsErrorMessage() {
+        // Arrange
+        let vm = RestaurantViewModel(restaurants: [])
+        let jobID = UUID()
+        vm.currentSearchJobID = jobID
+
+        // Act — complete update with no restaurants
+        vm.handleOrchestratorUpdate(makeUpdate(jobID: jobID, snapshot: [], isComplete: true))
+
+        // Assert
+        XCTAssertNotNil(vm.errorMessage, "An error message should be set when no restaurants are found")
+    }
+
+    func testCompleteUpdateWithNonEmptySnapshotDoesNotSetErrorMessage() {
+        // Arrange
+        let vm = RestaurantViewModel(restaurants: [])
+        let jobID = UUID()
+        vm.currentSearchJobID = jobID
+
+        // Act
+        vm.handleOrchestratorUpdate(
+            makeUpdate(jobID: jobID, snapshot: makeSampleRestaurants(), isComplete: true)
+        )
+
+        // Assert
+        XCTAssertNil(vm.errorMessage)
+    }
+
+    // MARK: - Non-Current-Job Tests
+
+    func testUpdateForOtherJobDoesNotClearOrSetErrorMessage() {
+        // Arrange — viewModel has an existing error; a background-job update should not clear it
+        let vm = RestaurantViewModel(restaurants: [])
+        vm.currentSearchJobID = UUID() // will not match the update's jobID
+        vm.errorMessage = "Existing error"
+
+        let otherJobID = UUID()
+        let newRestaurant = Restaurant(
+            id: UUID(),
+            name: "Background Find",
+            coordinate: .init(latitude: 40.75, longitude: -73.99),
+            distance: 5000,
+            category: "Burger",
+            cuisineTags: ["Burger"],
+            phoneNumber: nil,
+            url: nil
+        )
+
+        // Act — update from a background (non-current) job
+        vm.handleOrchestratorUpdate(makeUpdate(jobID: otherJobID, snapshot: [newRestaurant]))
+
+        // Assert — the non-current path does NOT touch errorMessage
+        XCTAssertEqual(
+            vm.errorMessage,
+            "Existing error",
+            "Non-current-job update must not modify the live errorMessage"
+        )
+    }
+
+    func testUpdateForOtherJobDoesNotChangeIsLoadingState() {
+        // Arrange
+        let vm = RestaurantViewModel(restaurants: [])
+        let currentJobID = UUID()
+        vm.currentSearchJobID = currentJobID
+        vm.isLoading = true
+
+        // Act — update for a different job
+        vm.handleOrchestratorUpdate(makeUpdate(jobID: UUID(), snapshot: makeSampleRestaurants()))
+
+        // Assert — isLoading unchanged because only the current-job path manages isLoading
+        XCTAssertTrue(vm.isLoading)
     }
 }
 

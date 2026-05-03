@@ -33,10 +33,10 @@ final class RestaurantViewModel: ObservableObject {
     @Published var selectedRestaurant: Restaurant?
 
     /// Whether a restaurant search is in progress.
-    @Published private(set) var isLoading = false
+    @Published var isLoading = false
 
     /// Whether additional batches are still loading after the first results appeared.
-    @Published private(set) var isLoadingMore = false
+    @Published var isLoadingMore = false
 
     /// Error message if something goes wrong.
     @Published var errorMessage: String?
@@ -90,7 +90,10 @@ final class RestaurantViewModel: ObservableObject {
     private var orchestratorTask: Task<Void, Never>?
 
     /// ID of the orchestrator job that maps to the current UI location.
-    private var currentSearchJobID: UUID?
+    ///
+    /// Declared `internal` (not `private`) so unit tests can set it directly and
+    /// feed synthetic `OrchestratorUpdate` values to `handleOrchestratorUpdate`.
+    var currentSearchJobID: UUID?
 
     // MARK: - Search Cache
 
@@ -133,7 +136,7 @@ final class RestaurantViewModel: ObservableObject {
         self.locationManager = locationManager ?? LocationManager()
         self.searchService = service
         self.ratingStore = ratingStore ?? RatingStore()
-        orchestrator = SearchOrchestrator(searchService: service)
+        self.orchestrator = SearchOrchestrator(searchService: service)
         observeOverrideLocation()
         startOrchestratorLoop()
     }
@@ -279,7 +282,10 @@ final class RestaurantViewModel: ObservableObject {
     /// - If the update belongs to `currentSearchJobID`, refreshes the live
     ///   restaurant list and manages the loading indicators.
     /// - Otherwise silently merges into the cache (background location work).
-    private func handleOrchestratorUpdate(_ update: OrchestratorUpdate) {
+    ///
+    /// Declared `internal` (not `private`) so unit tests can feed synthetic
+    /// `OrchestratorUpdate` values without running a real orchestrator.
+    func handleOrchestratorUpdate(_ update: OrchestratorUpdate) {
         if update.jobID == currentSearchJobID {
             restaurants = update.snapshot
             applyFilter()
@@ -436,8 +442,7 @@ final class RestaurantViewModel: ObservableObject {
                     let displayCategory: String? = if let newCat = restaurant.category,
                                                       !RestaurantSearchService.genericCategories.contains(newCat),
                                                       RestaurantSearchService.genericCategories
-                                                      .contains(existing.category ?? "")
-                    {
+                                                      .contains(existing.category ?? "") {
                         newCat
                     } else {
                         existing.category
@@ -473,7 +478,10 @@ final class RestaurantViewModel: ObservableObject {
     }
 
     /// Merges two restaurant lists, deduplicating by name + proximity.
-    private static func mergeRestaurantLists(
+    ///
+    /// Declared `internal` (not `private`) so unit tests can verify the
+    /// deduplication and sort behaviour in isolation.
+    static func mergeRestaurantLists(
         existing: [Restaurant],
         new: [Restaurant]
     ) -> [Restaurant] {
@@ -584,9 +592,7 @@ extension RestaurantViewModel {
         .sorted()
 
     /// Unique, sorted list of cuisine categories available for filtering.
-    var availableCuisines: [String] {
-        Self.allCuisines
-    }
+    var availableCuisines: [String] { Self.allCuisines }
 
     /// Total number of active filters (cuisine includes + excludes + rating).
     var activeCuisineFilterCount: Int {

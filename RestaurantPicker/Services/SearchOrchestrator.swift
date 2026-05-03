@@ -319,6 +319,7 @@ actor SearchOrchestrator {
 
     // MARK: - Test Helpers
 
+    #if DEBUG
     /// Sets `poiSearchDone` on the job with the given ID.
     ///
     /// Intended for use in unit tests only — not called by production code.
@@ -353,6 +354,7 @@ actor SearchOrchestrator {
         guard let idx = jobs.firstIndex(where: { $0.id == id }) else { return }
         jobs[idx].widePassBatchIndex = index
     }
+    #endif
 
     // MARK: - Run Loop
 
