@@ -166,7 +166,7 @@ final class RestaurantViewModel: ObservableObject {
         self.locationManager = locationManager ?? LocationManager()
         self.searchService = service
         self.ratingStore = ratingStore ?? RatingStore()
-        self.orchestrator = SearchOrchestrator(searchService: service)
+        orchestrator = SearchOrchestrator(searchService: service)
         observeOverrideLocation()
         startOrchestratorLoop()
         observeSearchText()
@@ -179,7 +179,7 @@ final class RestaurantViewModel: ObservableObject {
     ///   - ratingStore: Store for user ratings. Defaults to a new instance.
     @MainActor
     init(restaurants: [Restaurant], ratingStore: RatingStore? = nil) {
-        self.searchDebounceInterval = .zero
+        searchDebounceInterval = .zero
         let service = RestaurantSearchService()
         locationManager = LocationManager()
         searchService = service
@@ -528,7 +528,8 @@ final class RestaurantViewModel: ObservableObject {
         let displayCategory: String? = if let newCat = other.category,
                                           !RestaurantSearchService.genericCategories.contains(newCat),
                                           RestaurantSearchService.genericCategories
-                                          .contains(existing.category ?? "") {
+                                          .contains(existing.category ?? "")
+        {
             newCat
         } else {
             existing.category
@@ -670,7 +671,9 @@ extension RestaurantViewModel {
         .sorted()
 
     /// Unique, sorted list of cuisine categories available for filtering.
-    var availableCuisines: [String] { Self.allCuisines }
+    var availableCuisines: [String] {
+        Self.allCuisines
+    }
 
     /// Total number of active filters (cuisine includes + excludes + rating).
     var activeCuisineFilterCount: Int {

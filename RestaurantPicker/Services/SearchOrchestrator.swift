@@ -414,11 +414,14 @@ actor SearchOrchestrator {
         guard prioritised.allSatisfy(\.isNarrowPassComplete) else { return nil }
 
         // Rule 3a: resume an already-started wide-pass (any job, distance-ordered)
-        if let job = prioritised.first(where: {
-            guard let idx = $0.widePassBatchIndex else { return false }
-            return idx < $0.totalFocusedBatches
-        }) {
-            return .wideBatch(jobID: job.id, batchIndex: job.widePassBatchIndex!)
+        if let (jobID, batchIndex) = prioritised.lazy
+            .compactMap({ job -> (UUID, Int)? in
+                guard let idx = job.widePassBatchIndex, idx < job.totalFocusedBatches else { return nil }
+                return (job.id, idx)
+            })
+            .first
+        {
+            return .wideBatch(jobID: jobID, batchIndex: batchIndex)
         }
 
         // Rule 3b: start the wide-pass for the current job (first time only)

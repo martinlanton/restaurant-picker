@@ -1,3 +1,52 @@
+# Implementation Log: Safety Fix — Force Unwrap in SearchOrchestrator
+
+**Date**: 2026-05-04
+**Author**: GitHub Copilot
+
+## Overview
+
+Eliminated the only force unwrap (`!`) in production code, found in
+`SearchOrchestrator.pickNextWork()` Rule 3a. The unwrap was logically safe
+(the preceding closure's `guard let` guaranteed non-nil) but violated the
+project's no-force-unwrap policy and obscured intent.
+
+## Changes
+
+### SearchOrchestrator.swift — Rule 3a rewritten with `compactMap`
+
+**Before**:
+```swift
+if let job = prioritised.first(where: {
+    guard let idx = $0.widePassBatchIndex else { return false }
+    return idx < $0.totalFocusedBatches
+}) {
+    return .wideBatch(jobID: job.id, batchIndex: job.widePassBatchIndex!)
+}
+```
+
+**After**:
+```swift
+if let (jobID, batchIndex) = prioritised.lazy
+    .compactMap({ job -> (UUID, Int)? in
+        guard let idx = job.widePassBatchIndex, idx < job.totalFocusedBatches else { return nil }
+        return (job.id, idx)
+    })
+    .first
+{
+    return .wideBatch(jobID: jobID, batchIndex: batchIndex)
+}
+```
+
+The `compactMap` simultaneously checks the `widePassBatchIndex` is non-nil and
+within bounds, and captures the unwrapped value as a typed tuple. The force
+unwrap is gone; the batchIndex flows naturally.
+
+## Testing
+
+All 69 unit tests + 3 UI tests pass. Build succeeded. SwiftFormat clean.
+
+---
+
 # Implementation Log: Clean Code Refactor — Section 3
 
 **Date**: 2026-05-04
