@@ -67,9 +67,22 @@ final class RestaurantViewModel: ObservableObject {
     }
 
     /// Text to filter restaurants by name or category. Empty = no text filter.
+    ///
+    /// Writes are debounced: `applyFilter()` is not called immediately on each
+    /// keystroke. Instead a 150 ms Combine pipeline (`searchDebounce`) fires
+    /// `applyFilter()` once the user pauses typing, preventing a full O(n) filter
+    /// pass for every character entered.
+    ///
+    /// When `searchDebounceInterval` is `.zero` (test/preview inits) the filter
+    /// is applied synchronously in `didSet` so tests don't need to await a run-loop tick.
     @Published var searchText: String = "" {
-        didSet { applyFilter() }
+        didSet {
+            if searchDebounceInterval == .zero { applyFilter() }
+        }
     }
+
+    /// Cancellable for the search-text debounce pipeline.
+    private var searchDebounceCancellable: AnyCancellable?
 
     /// Whether to show the selected restaurant sheet.
     @Published var showSelectedRestaurant = false
@@ -126,6 +139,12 @@ final class RestaurantViewModel: ObservableObject {
     /// How long to wait for the first GPS fix after requesting it (2.0 s).
     private static let locationFixWaitNanoseconds: UInt64 = 2_000_000_000
 
+    /// Debounce interval applied to `searchText` changes before calling `applyFilter()`.
+    ///
+    /// The default (150 ms) prevents a full O(n) filter pass for every keystroke.
+    /// Tests pass `.zero` to get synchronous immediate filtering.
+    private let searchDebounceInterval: RunLoop.SchedulerTimeType.Stride
+
     // MARK: - Initialization
 
     /// Creates a new RestaurantViewModel with dependencies.
@@ -134,19 +153,23 @@ final class RestaurantViewModel: ObservableObject {
     ///   - locationManager: Manager for user location. Defaults to a new `LocationManager` instance.
     ///   - searchService: Service for searching restaurants. Defaults to a new `RestaurantSearchService` instance.
     ///   - ratingStore: Store for user ratings. Defaults to a new instance.
+    ///   - searchDebounceInterval: Debounce delay for search-text filtering. Defaults to 150 ms.
     @MainActor
     init(
         locationManager: (any LocationManaging)? = nil,
         searchService: (any RestaurantSearching)? = nil,
-        ratingStore: RatingStore? = nil
+        ratingStore: RatingStore? = nil,
+        searchDebounceInterval: RunLoop.SchedulerTimeType.Stride = .milliseconds(150)
     ) {
+        self.searchDebounceInterval = searchDebounceInterval
         let service = searchService ?? RestaurantSearchService()
         self.locationManager = locationManager ?? LocationManager()
         self.searchService = service
         self.ratingStore = ratingStore ?? RatingStore()
-        orchestrator = SearchOrchestrator(searchService: service)
+        self.orchestrator = SearchOrchestrator(searchService: service)
         observeOverrideLocation()
         startOrchestratorLoop()
+        observeSearchText()
     }
 
     /// Creates a new RestaurantViewModel with pre-loaded restaurants (for testing/previews).
@@ -156,6 +179,7 @@ final class RestaurantViewModel: ObservableObject {
     ///   - ratingStore: Store for user ratings. Defaults to a new instance.
     @MainActor
     init(restaurants: [Restaurant], ratingStore: RatingStore? = nil) {
+        self.searchDebounceInterval = .zero
         let service = RestaurantSearchService()
         locationManager = LocationManager()
         searchService = service
@@ -504,8 +528,7 @@ final class RestaurantViewModel: ObservableObject {
         let displayCategory: String? = if let newCat = other.category,
                                           !RestaurantSearchService.genericCategories.contains(newCat),
                                           RestaurantSearchService.genericCategories
-                                          .contains(existing.category ?? "")
-        {
+                                          .contains(existing.category ?? "") {
             newCat
         } else {
             existing.category
@@ -543,6 +566,22 @@ final class RestaurantViewModel: ObservableObject {
                 Task { @MainActor in
                     await self.fetchNearbyRestaurants()
                 }
+            }
+    }
+
+    /// Subscribes to `$searchText` with a 150 ms debounce so that `applyFilter()`
+    /// is not called for every individual keystroke.
+    ///
+    /// Without debouncing, typing "yakiniku" fires 8 filter passes over the full
+    /// restaurant list. With a 150 ms debounce only the final (or each paused)
+    /// text value triggers a filter, keeping the UI responsive during fast typing.
+    private func observeSearchText() {
+        guard searchDebounceInterval != .zero else { return }
+        searchDebounceCancellable = $searchText
+            .dropFirst()
+            .debounce(for: searchDebounceInterval, scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.applyFilter()
             }
     }
 
@@ -631,9 +670,7 @@ extension RestaurantViewModel {
         .sorted()
 
     /// Unique, sorted list of cuisine categories available for filtering.
-    var availableCuisines: [String] {
-        Self.allCuisines
-    }
+    var availableCuisines: [String] { Self.allCuisines }
 
     /// Total number of active filters (cuisine includes + excludes + rating).
     var activeCuisineFilterCount: Int {

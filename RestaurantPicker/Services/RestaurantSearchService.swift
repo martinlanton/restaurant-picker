@@ -370,9 +370,7 @@ actor RestaurantSearchService: RestaurantSearching {
                     }
                 }
                 var collected: [(String, String, SearchResult)] = []
-                for await item in group {
-                    collected.append(item)
-                }
+                for await item in group { collected.append(item) }
                 return collected
             }
 
@@ -543,9 +541,7 @@ actor RestaurantSearchService: RestaurantSearching {
                 }
             }
             var collected: [(Cardinal, SearchResult)] = []
-            for await item in group {
-                collected.append(item)
-            }
+            for await item in group { collected.append(item) }
             return collected
         }
     }
@@ -591,9 +587,7 @@ actor RestaurantSearchService: RestaurantSearching {
                 }
             }
             var collected: [SearchResult] = []
-            for await r in group {
-                collected.append(r)
-            }
+            for await r in group { collected.append(r) }
             return collected
         }
     }
@@ -629,9 +623,7 @@ actor RestaurantSearchService: RestaurantSearching {
                 }
             }
             var results: [(Restaurant, String)] = []
-            for await r in group {
-                results.append(contentsOf: r.results)
-            }
+            for await r in group { results.append(contentsOf: r.results) }
             return results
         }
     }
@@ -707,20 +699,34 @@ actor RestaurantSearchService: RestaurantSearching {
     /// Generic labels (e.g. "Restaurant") are stripped from both the
     /// display `category` and `cuisineTags` so that only meaningful
     /// cuisine types remain.
+    ///
+    /// ## Complexity
+    ///
+    /// Uses a `[String: [Int]]` dictionary keyed by lowercased restaurant name to
+    /// narrow the proximity check to same-name candidates only. For most inputs this
+    /// runs in O(n) time; chains with many same-name locations add a small constant
+    /// per chain. The previous O(n²) linear scan of the whole `unique` array has
+    /// been eliminated.
     static func deduplicate(_ results: [(Restaurant, String)]) -> [Restaurant] {
         var unique: [Restaurant] = []
+        /// Maps lowercased restaurant name → indices in `unique` with that name.
+        var nameIndex: [String: [Int]] = [:]
 
         for (restaurant, label) in results {
             let isGenericLabel = genericCategories.contains(label)
-            let key = restaurant.name.lowercased()
+            let nameKey = restaurant.name.lowercased()
 
-            if let idx = unique.firstIndex(where: { existing in
-                existing.name.lowercased() == key
-                    && abs(existing.coordinate.latitude - restaurant.coordinate.latitude)
+            // Narrow the proximity check to entries sharing the same name.
+            let candidates = nameIndex[nameKey] ?? []
+            let matchIdx = candidates.first { idx in
+                let existing = unique[idx]
+                return abs(existing.coordinate.latitude - restaurant.coordinate.latitude)
                     < Self.coordinateProximityThreshold
                     && abs(existing.coordinate.longitude - restaurant.coordinate.longitude)
                     < Self.coordinateProximityThreshold
-            }) {
+            }
+
+            if let idx = matchIdx {
                 let existing = unique[idx]
                 var mergedTags = existing.cuisineTags
                 if !isGenericLabel { mergedTags.insert(label) }
@@ -748,6 +754,7 @@ actor RestaurantSearchService: RestaurantSearching {
                 continue
             }
 
+            let newIdx = unique.count
             let category: String? = isGenericLabel ? nil : label
             var tags: Set<String> = []
             if !isGenericLabel { tags.insert(label) }
@@ -763,6 +770,7 @@ actor RestaurantSearchService: RestaurantSearching {
                 phoneNumber: restaurant.phoneNumber,
                 url: restaurant.url
             ))
+            nameIndex[nameKey, default: []].append(newIdx)
         }
 
         return unique
