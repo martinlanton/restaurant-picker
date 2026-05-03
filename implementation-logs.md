@@ -1,3 +1,67 @@
+# Implementation Log: CI/CD — GitHub Actions
+
+**Date**: 2026-05-04
+**Author**: GitHub Copilot
+
+## Overview
+
+Added `.github/workflows/ci.yml` to run linting, formatting checks, and the
+full test suite on every push and pull request against every branch.
+
+## Pipeline Structure
+
+### Job 1 — `lint-and-format` (macOS 15, Xcode 16.2)
+
+Runs first, in parallel. Fails fast so the matrix test jobs are not started
+when formatting or linting is broken.
+
+| Step | Tool | Purpose |
+|------|------|---------|
+| SwiftFormat lint | `swiftformat --lint .` | Block unformatted code |
+| SwiftLint strict | `swiftlint lint --strict` | Block style violations |
+
+### Job 2 — `test` (matrix, 3 devices, depends on job 1)
+
+Runs all unit tests **and** UI tests on three simulators in parallel:
+
+| Device | OS |
+|--------|----|
+| iPhone 15 | iOS 18.2 |
+| iPhone 15 Pro | iOS 18.2 |
+| iPhone 16 | iOS 18.2 |
+
+`fail-fast: false` ensures all three device results are collected even if one
+fails. `xcpretty` formats the `xcodebuild` output and produces a JUnit XML
+report that is uploaded as an artifact (retained 7 days).
+
+## Design Decisions
+
+### Decision 1: Two-job split (lint first, test in matrix)
+- **Context**: Linting/formatting is cheap (< 30 s). Running it before the
+  matrix avoids paying for three parallel simulator boots when the code is
+  obviously broken.
+- **Decision**: `test` depends on `lint-and-format` via `needs`.
+
+### Decision 2: `fail-fast: false` on the test matrix
+- **Context**: Knowing which specific device(s) fail is more actionable than
+  stopping at the first failure.
+- **Decision**: All three simulator runs always complete so the full picture is
+  visible in one CI run.
+
+### Decision 3: `macos-15` runner + Xcode 16.2 + iOS 18.2 simulators
+- **Context**: `macos-15` is the latest stable GitHub-hosted runner with
+  Xcode 16.2 pre-installed, which ships the iOS 18.2 simulator runtimes.
+- **Decision**: All jobs use `macos-15` for consistency and access to the
+  newest stable simulator runtimes.
+
+## Testing
+
+Verified locally that `swiftformat --lint .` and `swiftlint lint --strict`
+pass. The full unit + UI test suite (69 unit + 3 UI tests) passes locally
+against iPhone 15 Pro.
+
+---
+
 # Implementation Log: Safety Fix — Force Unwrap in SearchOrchestrator
 
 **Date**: 2026-05-04
