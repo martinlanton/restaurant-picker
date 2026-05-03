@@ -4,15 +4,27 @@ import MapKit
 
 /// Service for searching restaurants using Apple MapKit.
 ///
-/// This service uses `MKLocalSearch` to discover nearby restaurants
-/// based on the user's location and a specified search radius.
+/// This service exposes atomic batch-execution primitives that are driven by
+/// `SearchOrchestrator`. Each primitive runs one `withTaskGroup` batch of
+/// `MKLocalSearch` requests and returns immediately — allowing the orchestrator
+/// to interleave work across multiple locations without cancelling in-flight
+/// requests.
+///
+/// ## Primitives
+/// - `executeFocusedBatch` — runs a slice of cuisine queries against a focused region.
+/// - `executePOISearch` — runs a single POI-category search over the wide region.
+/// - `executeScatterNode` — runs one level of cardinal + diagonal scatter for a
+///   saturated node, returning child nodes for further scatter.
+/// - `executeWideBatch` — runs a slice of cuisine queries against the wide region.
 ///
 /// ## Usage
 /// ```swift
 /// let service = RestaurantSearchService()
-/// let restaurants = try await service.searchRestaurants(
-///     near: userLocation,
-///     radius: 2000
+/// let result = await service.executeFocusedBatch(
+///     queries: RestaurantSearchService.cuisineQueries,
+///     region: focusedRegion,
+///     location: userLocation,
+///     networkRadius: 10_000
 /// )
 /// ```
 actor RestaurantSearchService {
@@ -187,7 +199,7 @@ actor RestaurantSearchService {
         ("kosher restaurant", "Kosher"),
         ("organic restaurant", "Organic"),
         ("waffles restaurant", "Waffles"),
-        ("pancake restaurant", "Pancakes")
+        ("pancake restaurant", "Pancakes"),
     ]
 
     // MARK: - Generic Categories
@@ -203,7 +215,7 @@ actor RestaurantSearchService {
     /// cuisine types that users can filter on.
     static let genericCategories: Set<String> = [
         "Restaurant", "Family Restaurant", "Food Court",
-        "Food Market", "Brewery", "Winery", "Nightlife"
+        "Food Market", "Brewery", "Winery", "Nightlife",
     ]
 
     // MARK: - Constants
@@ -212,16 +224,48 @@ actor RestaurantSearchService {
     ///
     /// When a query returns exactly this many items, the category is likely
     /// saturated and additional results exist beyond what was returned.
-    /// Used by adaptive scatter to decide when to re-query from offset centres.
-    private static let mkLocalSearchResultCap = 25
+    /// Used by `executeScatterNode` to decide which child nodes to enqueue.
+    static let mkLocalSearchResultCap = 25
 
     /// Maximum recursion depth for adaptive scatter searches.
     ///
     /// At depth 3 the worst-case additional queries per cuisine label is ~29.
     /// Radii at each depth: R → R/2 → R/4 → R/8.
-    private static let maxScatterDepth = 3
+    static let maxScatterDepth = 3
 
-    // MARK: - Scatter Types
+    // MARK: - Internal Types
+
+    /// A pending scatter search node pairing a cuisine query with a
+    /// geographic sub-region to explore.
+    ///
+    /// Produced by `executeScatterNode` when a child region is saturated.
+    /// Stored in `SearchJob.pendingScatterNodes` by the orchestrator.
+    struct ScatterNode {
+        let query: String
+        let label: String
+        let centre: CLLocationCoordinate2D
+        let radius: Double
+        let depth: Int
+    }
+
+    /// Result of executing one focused-query batch via `executeFocusedBatch`.
+    struct FocusedBatchResult {
+        /// Restaurant/label pairs returned by the batch.
+        let results: [(Restaurant, String)]
+        /// Queries whose raw result count hit `mkLocalSearchResultCap`,
+        /// indicating the area is saturated and scatter should be enqueued.
+        let saturatedQueries: [(query: String, label: String)]
+    }
+
+    /// Result of executing one scatter node via `executeScatterNode`.
+    struct ScatterNodeResult {
+        /// Restaurant/label pairs returned by the cardinal + diagonal searches.
+        let results: [(Restaurant, String)]
+        /// Child nodes for saturated sub-regions that require further scatter.
+        let childNodes: [ScatterNode]
+    }
+
+    // MARK: - Private Types
 
     /// Cardinal direction used for scatter search offsets.
     private enum Cardinal: CaseIterable {
@@ -233,12 +277,7 @@ actor RestaurantSearchService {
         case northEast, northWest, southEast, southWest
     }
 
-    /// A search node representing a centre point + radius at a given recursion depth.
-    private struct SearchNode {
-        let centre: CLLocationCoordinate2D
-        let radius: Double
-        let depth: Int
-    }
+    // MARK: - Coordinate Helpers
 
     /// Offsets a coordinate by `metres` in a cardinal direction.
     ///
@@ -266,7 +305,7 @@ actor RestaurantSearchService {
         diagonal: Diagonal,
         metres: Double
     ) -> CLLocationCoordinate2D {
-        let component = metres / sqrt(2.0) // 45° projection
+        let component = metres / sqrt(2.0)
         let latDelta = component / 111_320.0
         let lngDelta = component / (111_320.0 * cos(coord.latitude * .pi / 180.0))
         switch diagonal {
@@ -300,216 +339,279 @@ actor RestaurantSearchService {
         }
     }
 
-    // MARK: - Public Methods
+    // MARK: - Batch Execution Primitives
 
-    /// Searches for restaurants near a location, yielding results progressively.
+    /// Executes one batch of cuisine queries concurrently against a focused region.
     ///
-    /// Runs in two phases:
-    /// 1. **Focused phase**: All cuisine queries use a region sized to `focusRadius`
-    ///    (the user's filter radius). Saturated queries trigger adaptive scatter
-    ///    within this radius. This maximizes coverage in the area the user is viewing.
-    /// 2. **Wide phase**: Priority-1 queries re-run with the full `radius` region
-    ///    to discover distant restaurants for when the user widens the filter.
-    ///
-    /// Both phases yield progressively into the same stream.
+    /// Runs all queries in `queries` in parallel via a `withTaskGroup`.
+    /// Returns the combined results and the subset of queries whose raw
+    /// result count hit `mkLocalSearchResultCap` (saturated — scatter needed).
     ///
     /// - Parameters:
-    ///   - location: The center point for the search.
-    ///   - radius: Maximum distance filter in meters. Defaults to 5000 (5km).
-    ///   - focusRadius: Region radius for initial queries + scatter depth-0.
-    ///     Defaults to `radius`. Pass the user's filter radius (e.g. 1000m) to
-    ///     concentrate discovery in the area being viewed.
-    /// - Returns: A stream of progressively larger restaurant snapshots.
-    func searchRestaurants(
-        near location: CLLocation,
-        radius: Double = 5000,
-        focusRadius: Double? = nil
-    ) -> AsyncThrowingStream<[Restaurant], Error> {
-        let effectiveFocusRadius = focusRadius ?? radius
-        // Focused region: sized to the user's filter radius
-        let focusedRegion = MKCoordinateRegion(
-            center: location.coordinate,
-            latitudinalMeters: effectiveFocusRadius * 2,
-            longitudinalMeters: effectiveFocusRadius * 2
-        )
-        // Wide region: sized to the full search radius (for pre-caching distant results)
-        let wideRegion = MKCoordinateRegion(
-            center: location.coordinate,
-            latitudinalMeters: radius * 2,
-            longitudinalMeters: radius * 2
-        )
-
-        return AsyncThrowingStream { continuation in
-            let innerTask = Task { [self] in
-                var accumulated: [(Restaurant, String)] = []
-                var allSaturated: [(query: String, label: String)] = []
-                let batchSize = 15
-                let delayNs: UInt64 = 50_000_000
-                let queries = Self.cuisineQueries
-                let batches: [[(query: String, label: String)]] = stride(
-                    from: 0, to: queries.count, by: batchSize
-                ).map { Array(queries[$0 ..< min($0 + batchSize, queries.count)]) }
-
-                // Fire POI search concurrently (uses wide region for broad coverage)
-                let poiTask = Task { [self] in
-                    await performPOISearch(
-                        region: wideRegion,
-                        location: location,
-                        radius: radius
-                    )
-                }
-
-                // === Phase 1: Focused queries (filter-radius-sized region) ===
-                for (batchIdx, batch) in batches.enumerated() {
-                    guard !Task.isCancelled else { break }
-
-                    let batchSearchResults: [(query: String, label: String, result: SearchResult)] =
-                        await withTaskGroup(
-                            of: (String, String, SearchResult).self
-                        ) { group in
-                            for cuisine in batch {
-                                group.addTask { [self] in
-                                    let r = await performSearch(
-                                        query: cuisine.query,
-                                        label: cuisine.label,
-                                        region: focusedRegion,
-                                        location: location,
-                                        radius: radius
-                                    )
-                                    return (cuisine.query, cuisine.label, r)
-                                }
-                            }
-                            var collected: [(String, String, SearchResult)] = []
-                            for await item in group {
-                                collected.append(item)
-                            }
-                            return collected
-                        }
-
-                    for item in batchSearchResults {
-                        accumulated.append(contentsOf: item.result.results)
-                    }
-
-                    if batchIdx == 0 {
-                        let poiResults = await poiTask.value
-                        accumulated.append(contentsOf: poiResults)
-                    }
-
-                    let snapshot = Self.deduplicateAndSort(accumulated)
-                    continuation.yield(snapshot)
-
-                    for item in batchSearchResults where item.result.rawCount >= Self.mkLocalSearchResultCap {
-                        allSaturated.append((query: item.query, label: item.label))
-                    }
-
-                    if batchIdx < batches.count - 1 {
-                        try? await Task.sleep(nanoseconds: delayNs)
+    ///   - queries: The `(query, label)` pairs to execute in this batch.
+    ///   - region: The `MKCoordinateRegion` to search within.
+    ///   - location: The user's location used for distance calculation.
+    ///   - networkRadius: Maximum distance in meters — results beyond this are discarded.
+    /// - Returns: A `FocusedBatchResult` with results and saturated queries.
+    func executeFocusedBatch(
+        queries: [(query: String, label: String)],
+        region: MKCoordinateRegion,
+        location: CLLocation,
+        networkRadius: Double
+    ) async -> FocusedBatchResult {
+        let batchResults: [(query: String, label: String, result: SearchResult)] =
+            await withTaskGroup(of: (String, String, SearchResult).self) { group in
+                for cuisine in queries {
+                    group.addTask { [self] in
+                        let r = await performSearch(
+                            query: cuisine.query,
+                            label: cuisine.label,
+                            region: region,
+                            location: location,
+                            radius: networkRadius
+                        )
+                        return (cuisine.query, cuisine.label, r)
                     }
                 }
-
-                // === Phase 2: Scatter for saturated queries ===
-                if !allSaturated.isEmpty, !Task.isCancelled {
-                    let scatterBatchSize = 5
-                    let scatterBatches = stride(from: 0, to: allSaturated.count, by: scatterBatchSize).map {
-                        Array(allSaturated[$0 ..< min($0 + scatterBatchSize, allSaturated.count)])
-                    }
-
-                    for (scatterIdx, scatterBatch) in scatterBatches.enumerated() {
-                        guard !Task.isCancelled else { break }
-
-                        let scatterResults = await withTaskGroup(
-                            of: [(Restaurant, String)].self
-                        ) { group in
-                            for item in scatterBatch {
-                                group.addTask { [self] in
-                                    let node = SearchNode(
-                                        centre: location.coordinate,
-                                        radius: effectiveFocusRadius,
-                                        depth: 0
-                                    )
-                                    return await scatterIfSaturated(
-                                        query: item.query,
-                                        label: item.label,
-                                        node: node,
-                                        userLocation: location,
-                                        maxRadius: radius
-                                    )
-                                }
-                            }
-                            var combined: [(Restaurant, String)] = []
-                            for await r in group {
-                                combined.append(contentsOf: r)
-                            }
-                            return combined
-                        }
-
-                        if !scatterResults.isEmpty {
-                            accumulated.append(contentsOf: scatterResults)
-                            let scatterSnapshot = Self.deduplicateAndSort(accumulated)
-                            continuation.yield(scatterSnapshot)
-                        }
-
-                        if scatterIdx < scatterBatches.count - 1 {
-                            try? await Task.sleep(nanoseconds: delayNs)
-                        }
-                    }
+                var collected: [(String, String, SearchResult)] = []
+                for await item in group {
+                    collected.append(item)
                 }
-
-                // === Phase 3: Wide pass (full-radius region) for distant results ===
-                // Re-run all queries with the wide region to catch restaurants beyond
-                // the focus radius. Only runs if focus radius < full radius.
-                if effectiveFocusRadius < radius, !Task.isCancelled {
-                    for (batchIdx, batch) in batches.enumerated() {
-                        guard !Task.isCancelled else { break }
-
-                        let batchResults = await withTaskGroup(
-                            of: SearchResult.self
-                        ) { group in
-                            for cuisine in batch {
-                                group.addTask { [self] in
-                                    await performSearch(
-                                        query: cuisine.query,
-                                        label: cuisine.label,
-                                        region: wideRegion,
-                                        location: location,
-                                        radius: radius
-                                    )
-                                }
-                            }
-                            var results: [SearchResult] = []
-                            for await r in group {
-                                results.append(r)
-                            }
-                            return results
-                        }
-
-                        for result in batchResults {
-                            accumulated.append(contentsOf: result.results)
-                        }
-
-                        let snapshot = Self.deduplicateAndSort(accumulated)
-                        continuation.yield(snapshot)
-
-                        if batchIdx < batches.count - 1 {
-                            try? await Task.sleep(nanoseconds: delayNs)
-                        }
-                    }
-                }
-
-                // Finish
-                let final = Self.deduplicateAndSort(accumulated)
-                if final.isEmpty {
-                    continuation.finish(throwing: SearchError.noResults)
-                } else {
-                    continuation.finish()
-                }
+                return collected
             }
 
-            continuation.onTermination = { @Sendable _ in
-                innerTask.cancel()
+        let results = batchResults.flatMap(\.result.results)
+        let saturated = batchResults
+            .filter { $0.result.rawCount >= Self.mkLocalSearchResultCap }
+            .map { (query: $0.query, label: $0.label) }
+
+        return FocusedBatchResult(results: results, saturatedQueries: saturated)
+    }
+
+    /// Executes a POI-category search covering the wide region.
+    ///
+    /// Uses `MKLocalPointsOfInterestRequest` with `.restaurant`, `.cafe`,
+    /// and `.bakery` filters. Each result's label is derived from its
+    /// actual POI category so cafés and bakeries get proper tags.
+    ///
+    /// - Parameters:
+    ///   - region: The `MKCoordinateRegion` to search within (typically the wide region).
+    ///   - location: The user's location used for distance calculation.
+    ///   - networkRadius: Maximum distance in meters — results beyond this are discarded.
+    /// - Returns: Restaurant/label pairs discovered by the POI search.
+    func executePOISearch(
+        region: MKCoordinateRegion,
+        location: CLLocation,
+        networkRadius: Double
+    ) async -> [(Restaurant, String)] {
+        let request = MKLocalPointsOfInterestRequest(coordinateRegion: region)
+        request.pointOfInterestFilter = MKPointOfInterestFilter(
+            including: [.restaurant, .cafe, .bakery]
+        )
+        let search = MKLocalSearch(request: request)
+        do {
+            let response = try await search.start()
+            return response.mapItems.compactMap { item in
+                guard let name = item.name else { return nil }
+                let itemLoc = CLLocation(
+                    latitude: item.placemark.coordinate.latitude,
+                    longitude: item.placemark.coordinate.longitude
+                )
+                let distance = location.distance(from: itemLoc)
+                guard distance <= networkRadius else { return nil }
+                let label = Self.poiCategoryLabel(for: item.pointOfInterestCategory)
+                let displayCat = Self.displayName(for: item.pointOfInterestCategory)
+                let restaurant = Restaurant(
+                    id: UUID(),
+                    name: name,
+                    coordinate: item.placemark.coordinate,
+                    distance: distance,
+                    category: displayCat,
+                    phoneNumber: item.phoneNumber,
+                    url: item.url
+                )
+                return (restaurant, label)
             }
+        } catch {
+            return []
         }
     }
+
+    /// Executes one level of scatter for a saturated node.
+    ///
+    /// Runs 4 cardinal searches (N/S/E/W) concurrently from the node's centre,
+    /// each at half the node's radius. If adjacent cardinals are also saturated,
+    /// diagonal fill points are searched as well. Returns all discovered results
+    /// plus child `ScatterNode`s for any saturated sub-regions, which the
+    /// orchestrator should enqueue for further scatter (up to `maxScatterDepth`).
+    ///
+    /// This method is deliberately non-recursive: it processes exactly one
+    /// node and returns, allowing the orchestrator to interleave work across
+    /// multiple locations between scatter levels.
+    ///
+    /// - Parameters:
+    ///   - node: The scatter node to process (query, centre, radius, depth).
+    ///   - userLocation: The user's actual location for distance calculation.
+    ///   - maxRadius: Maximum distance from the user to keep results.
+    /// - Returns: A `ScatterNodeResult` with results and pending child nodes.
+    func executeScatterNode(
+        _ node: ScatterNode,
+        userLocation: CLLocation,
+        maxRadius: Double
+    ) async -> ScatterNodeResult {
+        guard node.depth < Self.maxScatterDepth else {
+            return ScatterNodeResult(results: [], childNodes: [])
+        }
+
+        let childRadius = node.radius * 0.5
+        let offsetDistance = node.radius * 0.5
+
+        // Fire N/S/E/W concurrently (max 4 simultaneous queries)
+        let cardinalResults: [(Cardinal, SearchResult)] =
+            await withTaskGroup(of: (Cardinal, SearchResult).self) { group in
+                for dir in Cardinal.allCases {
+                    group.addTask { [self] in
+                        let centre = Self.offset(node.centre, direction: dir, metres: offsetDistance)
+                        let region = MKCoordinateRegion(
+                            center: centre,
+                            latitudinalMeters: childRadius * 2,
+                            longitudinalMeters: childRadius * 2
+                        )
+                        let result = await performSearch(
+                            query: node.query,
+                            label: node.label,
+                            region: region,
+                            location: userLocation,
+                            radius: maxRadius
+                        )
+                        return (dir, result)
+                    }
+                }
+                var collected: [(Cardinal, SearchResult)] = []
+                for await item in group {
+                    collected.append(item)
+                }
+                return collected
+            }
+
+        var accumulated: [(Restaurant, String)] = []
+        var saturatedCardinals: Set<Cardinal> = []
+
+        for (dir, result) in cardinalResults {
+            accumulated.append(contentsOf: result.results)
+            if result.rawCount >= Self.mkLocalSearchResultCap {
+                saturatedCardinals.insert(dir)
+            }
+        }
+
+        // Diagonal fill: search between each pair of adjacent saturated cardinals
+        var diagonalPoints: [(Diagonal, CLLocationCoordinate2D)] = []
+        let saturatedList = Array(saturatedCardinals)
+        for i in 0 ..< saturatedList.count {
+            for j in (i + 1) ..< saturatedList.count {
+                if let diag = Self.diagonal(between: saturatedList[i], and: saturatedList[j]) {
+                    let centre = Self.offset(node.centre, diagonal: diag, metres: offsetDistance)
+                    diagonalPoints.append((diag, centre))
+                }
+            }
+        }
+
+        var childNodes: [ScatterNode] = []
+
+        if !diagonalPoints.isEmpty {
+            let diagResults: [SearchResult] =
+                await withTaskGroup(of: SearchResult.self) { group in
+                    for (_, centre) in diagonalPoints {
+                        group.addTask { [self] in
+                            let region = MKCoordinateRegion(
+                                center: centre,
+                                latitudinalMeters: childRadius * 2,
+                                longitudinalMeters: childRadius * 2
+                            )
+                            return await performSearch(
+                                query: node.query,
+                                label: node.label,
+                                region: region,
+                                location: userLocation,
+                                radius: maxRadius
+                            )
+                        }
+                    }
+                    var collected: [SearchResult] = []
+                    for await r in group {
+                        collected.append(r)
+                    }
+                    return collected
+                }
+
+            for (idx, result) in diagResults.enumerated() {
+                accumulated.append(contentsOf: result.results)
+                if result.rawCount >= Self.mkLocalSearchResultCap {
+                    childNodes.append(ScatterNode(
+                        query: node.query,
+                        label: node.label,
+                        centre: diagonalPoints[idx].1,
+                        radius: childRadius,
+                        depth: node.depth + 1
+                    ))
+                }
+            }
+        }
+
+        // Enqueue saturated cardinal directions as child nodes
+        for (dir, result) in cardinalResults where result.rawCount >= Self.mkLocalSearchResultCap {
+            let centre = Self.offset(node.centre, direction: dir, metres: offsetDistance)
+            childNodes.append(ScatterNode(
+                query: node.query,
+                label: node.label,
+                centre: centre,
+                radius: childRadius,
+                depth: node.depth + 1
+            ))
+        }
+
+        return ScatterNodeResult(results: accumulated, childNodes: childNodes)
+    }
+
+    /// Executes one batch of cuisine queries concurrently against the wide region.
+    ///
+    /// Identical in structure to `executeFocusedBatch` but used for the
+    /// wide-pass phase (full network radius). Saturation is not tracked here
+    /// since wide-pass scatter is not performed.
+    ///
+    /// - Parameters:
+    ///   - queries: The `(query, label)` pairs to execute in this batch.
+    ///   - region: The wide `MKCoordinateRegion` (sized to `networkRadius`).
+    ///   - location: The user's location used for distance calculation.
+    ///   - networkRadius: Maximum distance in meters — results beyond this are discarded.
+    /// - Returns: Restaurant/label pairs discovered by this batch.
+    func executeWideBatch(
+        queries: [(query: String, label: String)],
+        region: MKCoordinateRegion,
+        location: CLLocation,
+        networkRadius: Double
+    ) async -> [(Restaurant, String)] {
+        await withTaskGroup(of: SearchResult.self) { group in
+            for cuisine in queries {
+                group.addTask { [self] in
+                    await performSearch(
+                        query: cuisine.query,
+                        label: cuisine.label,
+                        region: region,
+                        location: location,
+                        radius: networkRadius
+                    )
+                }
+            }
+            var results: [(Restaurant, String)] = []
+            for await r in group {
+                results.append(contentsOf: r.results)
+            }
+            return results
+        }
+    }
+
+    // MARK: - Cuisine Search
 
     /// Searches for restaurants matching specific cuisine labels.
     ///
@@ -518,7 +620,7 @@ actor RestaurantSearchService {
     /// that may not have appeared in the initial broad search.
     ///
     /// - Parameters:
-    ///   - cuisineLabels: Labels to search for (e.g. ["Yakiniku"]).
+    ///   - cuisineLabels: Labels to search for (e.g. `["Yakiniku"]`).
     ///   - location: The center point for the search.
     ///   - radius: Search radius in meters.
     /// - Returns: Array of discovered restaurants sorted by distance.
@@ -536,35 +638,39 @@ actor RestaurantSearchService {
         var queriesToRun: [(query: String, label: String)] = []
         for label in cuisineLabels {
             let lowered = label.lowercased()
-            if let match = Self.cuisineQueries.first(
-                where: { $0.label.lowercased() == lowered }
-            ) {
+            if let match = Self.cuisineQueries.first(where: { $0.label.lowercased() == lowered }) {
                 queriesToRun.append(match)
             }
-            queriesToRun.append(
-                (query: "\(label) restaurant", label: label)
-            )
+            queriesToRun.append((query: "\(label) restaurant", label: label))
             queriesToRun.append((query: label, label: label))
         }
 
-        let allResults = await performBatchedSearches(
-            queries: queriesToRun,
-            region: region,
-            location: location,
-            radius: radius
-        )
+        var allResults: [(Restaurant, String)] = []
+        let batchSize = 15
+        let batches = stride(from: 0, to: queriesToRun.count, by: batchSize)
+            .map { Array(queriesToRun[$0 ..< min($0 + batchSize, queriesToRun.count)]) }
 
-        return Self.deduplicate(allResults)
-            .sorted { $0.distance < $1.distance }
+        for (idx, batch) in batches.enumerated() {
+            let batchResult = await executeFocusedBatch(
+                queries: batch,
+                region: region,
+                location: location,
+                networkRadius: radius
+            )
+            allResults.append(contentsOf: batchResult.results)
+            if idx < batches.count - 1 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+
+        return Self.deduplicate(allResults).sorted { $0.distance < $1.distance }
     }
 
     // MARK: - Deduplication
 
     /// Sorts results so specific labels come before generic, deduplicates,
     /// and returns the final list sorted by distance.
-    private static func deduplicateAndSort(
-        _ results: [(Restaurant, String)]
-    ) -> [Restaurant] {
+    static func deduplicateAndSort(_ results: [(Restaurant, String)]) -> [Restaurant] {
         let sorted = results.sorted { lhs, rhs in
             let lhsG = genericCategories.contains(lhs.1)
             let rhsG = genericCategories.contains(rhs.1)
@@ -581,9 +687,7 @@ actor RestaurantSearchService {
     /// Generic labels (e.g. "Restaurant") are stripped from both the
     /// display `category` and `cuisineTags` so that only meaningful
     /// cuisine types remain.
-    private static func deduplicate(
-        _ results: [(Restaurant, String)]
-    ) -> [Restaurant] {
+    static func deduplicate(_ results: [(Restaurant, String)]) -> [Restaurant] {
         var unique: [Restaurant] = []
 
         for (restaurant, label) in results {
@@ -592,28 +696,15 @@ actor RestaurantSearchService {
 
             if let idx = unique.firstIndex(where: { existing in
                 existing.name.lowercased() == key
-                    && abs(
-                        existing.coordinate.latitude
-                            - restaurant.coordinate.latitude
-                    ) < 0.0005
-                    && abs(
-                        existing.coordinate.longitude
-                            - restaurant.coordinate.longitude
-                    ) < 0.0005
+                    && abs(existing.coordinate.latitude - restaurant.coordinate.latitude) < 0.0005
+                    && abs(existing.coordinate.longitude - restaurant.coordinate.longitude) < 0.0005
             }) {
-                // Duplicate — merge tag and maybe upgrade category
                 let existing = unique[idx]
                 var mergedTags = existing.cuisineTags
-                if !isGenericLabel {
-                    mergedTags.insert(label)
-                }
+                if !isGenericLabel { mergedTags.insert(label) }
 
                 let newCategory: String? = if !isGenericLabel {
-                    // Incoming label is specific — upgrade if needed
-                    if existing.category == nil
-                        || genericCategories.contains(
-                            existing.category ?? ""
-                        ) {
+                    if existing.category == nil || genericCategories.contains(existing.category ?? "") {
                         label
                     } else {
                         existing.category
@@ -629,26 +720,18 @@ actor RestaurantSearchService {
                     distance: existing.distance,
                     category: newCategory,
                     cuisineTags: mergedTags,
-                    phoneNumber: existing.phoneNumber
-                        ?? restaurant.phoneNumber,
+                    phoneNumber: existing.phoneNumber ?? restaurant.phoneNumber,
                     url: existing.url ?? restaurant.url
                 )
                 continue
             }
 
-            // New restaurant
             let category: String? = isGenericLabel ? nil : label
             var tags: Set<String> = []
-            if !isGenericLabel {
-                tags.insert(label)
-            }
-            // Also include the POI displayName if it is not generic
-            if let cat = restaurant.category,
-               !genericCategories.contains(cat) {
-                tags.insert(cat)
-            }
+            if !isGenericLabel { tags.insert(label) }
+            if let cat = restaurant.category, !genericCategories.contains(cat) { tags.insert(cat) }
 
-            let categorized = Restaurant(
+            unique.append(Restaurant(
                 id: restaurant.id,
                 name: restaurant.name,
                 coordinate: restaurant.coordinate,
@@ -657,236 +740,20 @@ actor RestaurantSearchService {
                 cuisineTags: tags,
                 phoneNumber: restaurant.phoneNumber,
                 url: restaurant.url
-            )
-            unique.append(categorized)
+            ))
         }
 
         return unique
     }
 
-    // MARK: - Search Helpers
-
-    /// Runs search queries in batches to avoid MapKit rate limiting.
-    ///
-    /// Firing all ~150 queries simultaneously causes Apple's servers to
-    /// throttle most of them, returning empty results silently. Running
-    /// queries in groups of `batchSize` with a short `delayNanoseconds`
-    /// pause between groups keeps total throughput high while staying
-    /// within rate limits.
-    ///
-    /// - Parameters:
-    ///   - queries: All `(query, label)` pairs to execute.
-    ///   - region: The MapKit search region.
-    ///   - location: The user's location for distance calculation.
-    ///   - radius: Maximum distance in meters.
-    ///   - batchSize: Number of concurrent requests per batch. Defaults to 15.
-    ///   - delayNanoseconds: Pause between batches. Defaults to 50ms.
-    private func performBatchedSearches(
-        queries: [(query: String, label: String)],
-        region: MKCoordinateRegion,
-        location: CLLocation,
-        radius: Double,
-        batchSize: Int = 15,
-        delayNanoseconds: UInt64 = 50_000_000
-    ) async -> [(Restaurant, String)] {
-        var combined: [(Restaurant, String)] = []
-        let batches = stride(from: 0, to: queries.count, by: batchSize).map {
-            Array(queries[$0 ..< min($0 + batchSize, queries.count)])
-        }
-
-        for batch in batches {
-            let batchResults = await withTaskGroup(
-                of: SearchResult.self
-            ) { group in
-                for cuisine in batch {
-                    group.addTask { [self] in
-                        await performSearch(
-                            query: cuisine.query,
-                            label: cuisine.label,
-                            region: region,
-                            location: location,
-                            radius: radius
-                        )
-                    }
-                }
-                var results: [SearchResult] = []
-                for await r in group {
-                    results.append(r)
-                }
-                return results
-            }
-            for result in batchResults {
-                combined.append(contentsOf: result.results)
-            }
-            if batch.last?.query != batches.last?.last?.query {
-                try? await Task.sleep(nanoseconds: delayNanoseconds)
-            }
-        }
-
-        return combined
-    }
-
-    // MARK: - Adaptive Scatter
-
-    /// Recursively searches from offset centres for a saturated query.
-    ///
-    /// When a query returns `mkLocalSearchResultCap` results, there are
-    /// likely more nearby restaurants that didn't make the top-25. This
-    /// method re-runs the query from 4 cardinal offset points (N/S/E/W)
-    /// at half the parent radius. If adjacent cardinals are also saturated,
-    /// a diagonal fill point is added between them (at the same radius as
-    /// the parent). All saturated points recurse up to `maxScatterDepth`.
-    ///
-    /// - Parameters:
-    ///   - query: The natural language query string.
-    ///   - label: The cuisine label for this query.
-    ///   - node: The parent search node (centre, radius, depth).
-    ///   - userLocation: The user's actual location for distance calculation.
-    ///   - maxRadius: Maximum distance from the user to keep results.
-    /// - Returns: All additional results discovered by scatter searches.
-    private func scatterIfSaturated(
-        query: String,
-        label: String,
-        node: SearchNode,
-        userLocation: CLLocation,
-        maxRadius: Double
-    ) async -> [(Restaurant, String)] {
-        guard node.depth < Self.maxScatterDepth else { return [] }
-
-        let childRadius = node.radius * 0.5
-        let offsetDistance = node.radius * 0.5
-
-        // Fire N/S/E/W concurrently
-        let cardinalResults: [(Cardinal, SearchResult)] = await withTaskGroup(
-            of: (Cardinal, SearchResult).self
-        ) { group in
-            for dir in Cardinal.allCases {
-                group.addTask { [self] in
-                    let centre = Self.offset(node.centre, direction: dir, metres: offsetDistance)
-                    let region = MKCoordinateRegion(
-                        center: centre,
-                        latitudinalMeters: childRadius * 2,
-                        longitudinalMeters: childRadius * 2
-                    )
-                    let result = await performSearch(
-                        query: query,
-                        label: label,
-                        region: region,
-                        location: userLocation,
-                        radius: maxRadius
-                    )
-                    return (dir, result)
-                }
-            }
-            var collected: [(Cardinal, SearchResult)] = []
-            for await item in group {
-                collected.append(item)
-            }
-            return collected
-        }
-
-        // Collect results and identify saturated cardinals
-        var accumulated: [(Restaurant, String)] = []
-        var saturatedCardinals: Set<Cardinal> = []
-
-        for (dir, result) in cardinalResults {
-            accumulated.append(contentsOf: result.results)
-            if result.rawCount >= Self.mkLocalSearchResultCap {
-                saturatedCardinals.insert(dir)
-            }
-        }
-
-        // Diagonal fill: for each pair of adjacent saturated cardinals, add diagonal
-        var diagonalPoints: [(Diagonal, CLLocationCoordinate2D)] = []
-        let saturatedList = Array(saturatedCardinals)
-        for i in 0 ..< saturatedList.count {
-            for j in (i + 1) ..< saturatedList.count {
-                if let diag = Self.diagonal(between: saturatedList[i], and: saturatedList[j]) {
-                    let centre = Self.offset(node.centre, diagonal: diag, metres: offsetDistance)
-                    diagonalPoints.append((diag, centre))
-                }
-            }
-        }
-
-        // Fire diagonal searches concurrently
-        if !diagonalPoints.isEmpty {
-            let diagResults: [SearchResult] = await withTaskGroup(
-                of: SearchResult.self
-            ) { group in
-                for (_, centre) in diagonalPoints {
-                    group.addTask { [self] in
-                        let region = MKCoordinateRegion(
-                            center: centre,
-                            latitudinalMeters: childRadius * 2,
-                            longitudinalMeters: childRadius * 2
-                        )
-                        return await performSearch(
-                            query: query,
-                            label: label,
-                            region: region,
-                            location: userLocation,
-                            radius: maxRadius
-                        )
-                    }
-                }
-                var collected: [SearchResult] = []
-                for await r in group {
-                    collected.append(r)
-                }
-                return collected
-            }
-
-            // Collect diagonal results; saturated diagonals also recurse
-            for (idx, result) in diagResults.enumerated() {
-                accumulated.append(contentsOf: result.results)
-                if result.rawCount >= Self.mkLocalSearchResultCap {
-                    let childNode = SearchNode(
-                        centre: diagonalPoints[idx].1,
-                        radius: childRadius,
-                        depth: node.depth + 1
-                    )
-                    let deeper = await scatterIfSaturated(
-                        query: query,
-                        label: label,
-                        node: childNode,
-                        userLocation: userLocation,
-                        maxRadius: maxRadius
-                    )
-                    accumulated.append(contentsOf: deeper)
-                }
-            }
-        }
-
-        // Recurse on saturated cardinal points
-        for (dir, result) in cardinalResults where result.rawCount >= Self.mkLocalSearchResultCap {
-            let centre = Self.offset(node.centre, direction: dir, metres: offsetDistance)
-            let childNode = SearchNode(
-                centre: centre,
-                radius: childRadius,
-                depth: node.depth + 1
-            )
-            let deeper = await scatterIfSaturated(
-                query: query,
-                label: label,
-                node: childNode,
-                userLocation: userLocation,
-                maxRadius: maxRadius
-            )
-            accumulated.append(contentsOf: deeper)
-        }
-
-        return accumulated
-    }
+    // MARK: - Private Search Helpers
 
     /// Result from a single `MKLocalSearch` query.
     ///
     /// - `results`: Restaurant/label pairs that passed the radius filter.
     /// - `rawCount`: `response.mapItems.count` **before** the radius filter,
     ///   used to detect saturation (`rawCount == mkLocalSearchResultCap`).
-    private typealias SearchResult = (
-        results: [(Restaurant, String)],
-        rawCount: Int
-    )
+    private typealias SearchResult = (results: [(Restaurant, String)], rawCount: Int)
 
     /// Performs a single `MKLocalSearch` query and returns results
     /// paired with the cuisine label that triggered the search.
@@ -903,24 +770,18 @@ actor RestaurantSearchService {
         request.resultTypes = .pointOfInterest
 
         let search = MKLocalSearch(request: request)
-
         do {
             let response = try await search.start()
             let rawCount = response.mapItems.count
-
             let filtered = response.mapItems.compactMap { item -> (Restaurant, String)? in
                 guard let name = item.name else { return nil }
-
                 let itemLoc = CLLocation(
                     latitude: item.placemark.coordinate.latitude,
                     longitude: item.placemark.coordinate.longitude
                 )
                 let distance = location.distance(from: itemLoc)
                 guard distance <= radius else { return nil }
-
-                let displayCat = Self.displayName(
-                    for: item.pointOfInterestCategory
-                )
+                let displayCat = Self.displayName(for: item.pointOfInterestCategory)
                 let restaurant = Restaurant(
                     id: UUID(),
                     name: name,
@@ -938,60 +799,6 @@ actor RestaurantSearchService {
         }
     }
 
-    /// Performs a POI category-based search for restaurants.
-    ///
-    /// Uses `MKLocalPointsOfInterestRequest` with `.restaurant`, `.cafe`,
-    /// and `.bakery` filters. Each result's label is derived from its
-    /// actual POI category so cafés and bakeries get proper tags.
-    private func performPOISearch(
-        region: MKCoordinateRegion,
-        location: CLLocation,
-        radius: Double
-    ) async -> [(Restaurant, String)] {
-        let request = MKLocalPointsOfInterestRequest(
-            coordinateRegion: region
-        )
-        request.pointOfInterestFilter = MKPointOfInterestFilter(
-            including: [.restaurant, .cafe, .bakery]
-        )
-
-        let search = MKLocalSearch(request: request)
-
-        do {
-            let response = try await search.start()
-
-            return response.mapItems.compactMap { item in
-                guard let name = item.name else { return nil }
-
-                let itemLoc = CLLocation(
-                    latitude: item.placemark.coordinate.latitude,
-                    longitude: item.placemark.coordinate.longitude
-                )
-                let distance = location.distance(from: itemLoc)
-                guard distance <= radius else { return nil }
-
-                let label = Self.poiCategoryLabel(
-                    for: item.pointOfInterestCategory
-                )
-                let displayCat = Self.displayName(
-                    for: item.pointOfInterestCategory
-                )
-                let restaurant = Restaurant(
-                    id: UUID(),
-                    name: name,
-                    coordinate: item.placemark.coordinate,
-                    distance: distance,
-                    category: displayCat,
-                    phoneNumber: item.phoneNumber,
-                    url: item.url
-                )
-                return (restaurant, label)
-            }
-        } catch {
-            return []
-        }
-    }
-
     // MARK: - Category Helpers
 
     /// Maps a POI category to the corresponding cuisine query label.
@@ -999,9 +806,7 @@ actor RestaurantSearchService {
     /// Cafés and bakeries get their specific label; everything else
     /// gets the generic `"Restaurant"` (which will be stripped during
     /// deduplication).
-    private static func poiCategoryLabel(
-        for category: MKPointOfInterestCategory?
-    ) -> String {
+    private static func poiCategoryLabel(for category: MKPointOfInterestCategory?) -> String {
         guard let category else { return "Restaurant" }
         switch category {
         case .cafe: return "Café"
@@ -1011,11 +816,8 @@ actor RestaurantSearchService {
     }
 
     /// Converts an `MKPointOfInterestCategory` to a human-readable name.
-    private static func displayName(
-        for category: MKPointOfInterestCategory?
-    ) -> String? {
+    private static func displayName(for category: MKPointOfInterestCategory?) -> String? {
         guard let category else { return nil }
-
         switch category {
         case .restaurant: return "Restaurant"
         case .cafe: return "Café"
@@ -1027,9 +829,7 @@ actor RestaurantSearchService {
         default:
             let raw = category.rawValue
             if raw.hasPrefix("MKPOICategory") {
-                let stripped = String(
-                    raw.dropFirst("MKPOICategory".count)
-                )
+                let stripped = String(raw.dropFirst("MKPOICategory".count))
                 return stripped.replacingOccurrences(
                     of: "([a-z])([A-Z])",
                     with: "$1 $2",

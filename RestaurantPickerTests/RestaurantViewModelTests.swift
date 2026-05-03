@@ -36,7 +36,7 @@ final class RestaurantViewModelTests: XCTestCase {
             cuisineTags: ["Japanese"],
             phoneNumber: nil,
             url: nil
-        )
+        ),
     ]
 
     // MARK: - Filter Tests
@@ -258,7 +258,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 category: nil,
                 phoneNumber: nil,
                 url: nil
-            )
+            ),
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -282,7 +282,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 category: nil,
                 phoneNumber: nil,
                 url: nil
-            )
+            ),
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -382,7 +382,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 category: nil,
                 phoneNumber: nil,
                 url: nil
-            )
+            ),
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -558,7 +558,7 @@ final class RestaurantViewModelTests: XCTestCase {
         let ratingStore = RatingStore(defaults: makeTestDefaults())
         let restaurants = [
             sampleRestaurants[0], // Thai Place
-            sampleRestaurants[1] // Pizza Shop
+            sampleRestaurants[1], // Pizza Shop
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants, ratingStore: ratingStore)
         viewModel.filterRadius = nil
@@ -812,7 +812,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 phoneNumber: nil,
                 url: nil
             ),
-            sampleRestaurants[1]
+            sampleRestaurants[1],
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil
@@ -838,7 +838,7 @@ final class RestaurantViewModelTests: XCTestCase {
                 phoneNumber: nil,
                 url: nil
             ),
-            sampleRestaurants[1]
+            sampleRestaurants[1],
         ]
         let viewModel = RestaurantViewModel(restaurants: restaurants)
         viewModel.filterRadius = nil

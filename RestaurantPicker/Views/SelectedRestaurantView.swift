@@ -116,7 +116,7 @@ struct SelectedRestaurantView: View {
         let mapItem = MKMapItem(placemark: placemark)
         mapItem.name = restaurant.name
         mapItem.openInMaps(launchOptions: [
-            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving,
         ])
     }
 }

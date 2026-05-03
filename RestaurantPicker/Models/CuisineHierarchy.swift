@@ -56,17 +56,17 @@ enum CuisineHierarchy {
                 "Japanese", "Sushi", "Ramen", "Udon", "Soba", "Tempura",
                 "Tonkatsu", "Yakiniku", "Yakitori", "Shabu-Shabu", "Izakaya",
                 "Washoku", "Okonomiyaki", "Takoyaki", "Gyudon", "Donburi",
-                "Teppanyaki", "Kaiseki", "Kushikatsu", "Yoshoku"
+                "Teppanyaki", "Kaiseki", "Kushikatsu", "Yoshoku",
             ]),
             CuisineGroup(name: "Chinese", cuisines: [
-                "Chinese", "Dim Sum", "Cantonese", "Szechuan", "Hotpot", "Dumpling"
+                "Chinese", "Dim Sum", "Cantonese", "Szechuan", "Hotpot", "Dumpling",
             ]),
             CuisineGroup(name: "Korean", cuisines: [
-                "Korean", "Korean BBQ", "Korean Fried Chicken"
+                "Korean", "Korean BBQ", "Korean Fried Chicken",
             ]),
             CuisineGroup(name: "Thai", cuisines: []),
             CuisineGroup(name: "Vietnamese", cuisines: [
-                "Vietnamese", "Pho", "Bánh Mì"
+                "Vietnamese", "Pho", "Bánh Mì",
             ]),
             CuisineGroup(name: "Filipino", cuisines: []),
             CuisineGroup(name: "Indonesian", cuisines: []),
@@ -74,14 +74,14 @@ enum CuisineHierarchy {
             CuisineGroup(name: "Singaporean", cuisines: []),
             CuisineGroup(name: "Taiwanese", cuisines: []),
             CuisineGroup(name: "Indian", cuisines: [
-                "Indian", "Curry", "Biryani"
+                "Indian", "Curry", "Biryani",
             ]),
             CuisineGroup(name: "Nepali", cuisines: []),
             CuisineGroup(name: "Pakistani", cuisines: []),
             CuisineGroup(name: "Sri Lankan", cuisines: []),
             CuisineGroup(name: "Tibetan", cuisines: []),
             CuisineGroup(name: "Afghan", cuisines: []),
-            CuisineGroup(name: "Boba Tea", cuisines: [])
+            CuisineGroup(name: "Boba Tea", cuisines: []),
         ]),
 
         // MARK: Country entries under Asia (only countries with sub-cuisines)
@@ -91,28 +91,28 @@ enum CuisineHierarchy {
                 "Japanese", "Sushi", "Ramen", "Udon", "Soba", "Tempura",
                 "Tonkatsu", "Yakiniku", "Yakitori", "Shabu-Shabu", "Izakaya",
                 "Washoku", "Okonomiyaki", "Takoyaki", "Gyudon", "Donburi",
-                "Teppanyaki", "Kaiseki", "Kushikatsu", "Yoshoku"
-            ])
+                "Teppanyaki", "Kaiseki", "Kushikatsu", "Yoshoku",
+            ]),
         ]),
         CuisineRegion(name: "🇨🇳 Chinese", isContinent: false, groups: [
             CuisineGroup(name: "Chinese", cuisines: [
-                "Chinese", "Dim Sum", "Cantonese", "Szechuan", "Hotpot", "Dumpling"
-            ])
+                "Chinese", "Dim Sum", "Cantonese", "Szechuan", "Hotpot", "Dumpling",
+            ]),
         ]),
         CuisineRegion(name: "🇰🇷 Korean", isContinent: false, groups: [
             CuisineGroup(name: "Korean", cuisines: [
-                "Korean", "Korean BBQ", "Korean Fried Chicken"
-            ])
+                "Korean", "Korean BBQ", "Korean Fried Chicken",
+            ]),
         ]),
         CuisineRegion(name: "🇻🇳 Vietnamese", isContinent: false, groups: [
             CuisineGroup(name: "Vietnamese", cuisines: [
-                "Vietnamese", "Pho", "Bánh Mì"
-            ])
+                "Vietnamese", "Pho", "Bánh Mì",
+            ]),
         ]),
         CuisineRegion(name: "🇮🇳 Indian", isContinent: false, groups: [
             CuisineGroup(name: "Indian", cuisines: [
-                "Indian", "Curry", "Biryani"
-            ])
+                "Indian", "Curry", "Biryani",
+            ]),
         ]),
 
         // MARK: - 🌍 Middle East & Africa (continent)
@@ -120,51 +120,51 @@ enum CuisineHierarchy {
         CuisineRegion(name: "🌍 Middle East & Africa", isContinent: true, groups: [
             CuisineGroup(name: "Middle Eastern", cuisines: [
                 "Middle Eastern", "Lebanese", "Turkish", "Persian",
-                "Israeli", "Egyptian", "Shawarma", "Falafel", "Kebab"
+                "Israeli", "Egyptian", "Shawarma", "Falafel", "Kebab",
             ]),
             CuisineGroup(name: "African", cuisines: [
-                "African", "Moroccan", "Ethiopian", "South African"
-            ])
+                "African", "Moroccan", "Ethiopian", "South African",
+            ]),
         ]),
 
         // MARK: Country entries under Middle East & Africa (only countries with sub-cuisines)
 
         CuisineRegion(name: "🇱🇧 Lebanese", isContinent: false, groups: [
             CuisineGroup(name: "Lebanese", cuisines: [
-                "Lebanese", "Shawarma", "Falafel", "Kebab"
-            ])
+                "Lebanese", "Shawarma", "Falafel", "Kebab",
+            ]),
         ]),
         CuisineRegion(name: "🇹🇷 Turkish", isContinent: false, groups: [
             CuisineGroup(name: "Turkish", cuisines: [
-                "Turkish", "Kebab"
-            ])
+                "Turkish", "Kebab",
+            ]),
         ]),
         CuisineRegion(name: "🇮🇱 Israeli", isContinent: false, groups: [
             CuisineGroup(name: "Israeli", cuisines: [
-                "Israeli", "Falafel"
-            ])
+                "Israeli", "Falafel",
+            ]),
         ]),
 
         // MARK: - 🌍 Europe (continent)
 
         CuisineRegion(name: "🌍 Europe", isContinent: true, groups: [
             CuisineGroup(name: "Italian", cuisines: [
-                "Italian", "Pizza", "Pasta"
+                "Italian", "Pizza", "Pasta",
             ]),
             CuisineGroup(name: "French", cuisines: [
-                "French", "Crêperie"
+                "French", "Crêperie",
             ]),
             CuisineGroup(name: "Spanish", cuisines: [
-                "Spanish", "Tapas"
+                "Spanish", "Tapas",
             ]),
             CuisineGroup(name: "Greek", cuisines: [
-                "Greek", "Mediterranean"
+                "Greek", "Mediterranean",
             ]),
             CuisineGroup(name: "British", cuisines: [
-                "British", "Fish & Chips", "Gastropub", "Pub"
+                "British", "Fish & Chips", "Gastropub", "Pub",
             ]),
             CuisineGroup(name: "Irish", cuisines: [
-                "Irish", "Pub"
+                "Irish", "Pub",
             ]),
             CuisineGroup(name: "German", cuisines: ["German"]),
             CuisineGroup(name: "Portuguese", cuisines: ["Portuguese"]),
@@ -173,57 +173,57 @@ enum CuisineHierarchy {
             CuisineGroup(name: "Hungarian", cuisines: ["Hungarian"]),
             CuisineGroup(name: "Austrian", cuisines: ["Austrian"]),
             CuisineGroup(name: "Swiss", cuisines: [
-                "Swiss", "Fondue"
+                "Swiss", "Fondue",
             ]),
             CuisineGroup(name: "Belgian", cuisines: [
-                "Belgian", "Waffles"
+                "Belgian", "Waffles",
             ]),
             CuisineGroup(name: "Dutch", cuisines: ["Dutch"]),
             CuisineGroup(name: "Georgian", cuisines: ["Georgian"]),
-            CuisineGroup(name: "Russian", cuisines: ["Russian"])
+            CuisineGroup(name: "Russian", cuisines: ["Russian"]),
         ]),
 
         // MARK: Country entries under Europe (only countries with sub-cuisines)
 
         CuisineRegion(name: "🇮🇹 Italian", isContinent: false, groups: [
             CuisineGroup(name: "Italian", cuisines: [
-                "Italian", "Pizza", "Pasta"
-            ])
+                "Italian", "Pizza", "Pasta",
+            ]),
         ]),
         CuisineRegion(name: "🇫🇷 French", isContinent: false, groups: [
             CuisineGroup(name: "French", cuisines: [
-                "French", "Crêperie"
-            ])
+                "French", "Crêperie",
+            ]),
         ]),
         CuisineRegion(name: "🇪🇸 Spanish", isContinent: false, groups: [
             CuisineGroup(name: "Spanish", cuisines: [
-                "Spanish", "Tapas"
-            ])
+                "Spanish", "Tapas",
+            ]),
         ]),
         CuisineRegion(name: "🇬🇷 Greek", isContinent: false, groups: [
             CuisineGroup(name: "Greek", cuisines: [
-                "Greek", "Mediterranean"
-            ])
+                "Greek", "Mediterranean",
+            ]),
         ]),
         CuisineRegion(name: "🇬🇧 British", isContinent: false, groups: [
             CuisineGroup(name: "British", cuisines: [
-                "British", "Fish & Chips", "Gastropub", "Pub"
-            ])
+                "British", "Fish & Chips", "Gastropub", "Pub",
+            ]),
         ]),
         CuisineRegion(name: "🇮🇪 Irish", isContinent: false, groups: [
             CuisineGroup(name: "Irish", cuisines: [
-                "Irish", "Pub"
-            ])
+                "Irish", "Pub",
+            ]),
         ]),
         CuisineRegion(name: "🇨🇭 Swiss", isContinent: false, groups: [
             CuisineGroup(name: "Swiss", cuisines: [
-                "Swiss", "Fondue"
-            ])
+                "Swiss", "Fondue",
+            ]),
         ]),
         CuisineRegion(name: "🇧🇪 Belgian", isContinent: false, groups: [
             CuisineGroup(name: "Belgian", cuisines: [
-                "Belgian", "Waffles"
-            ])
+                "Belgian", "Waffles",
+            ]),
         ]),
 
         // MARK: - 🌎 Americas (continent)
@@ -232,10 +232,10 @@ enum CuisineHierarchy {
             CuisineGroup(name: "American", cuisines: [
                 "American", "Burger", "Steakhouse", "Diner", "Soul Food",
                 "Cajun", "Creole", "Wings", "Hot Dog", "Donuts",
-                "Hawaiian", "Poke"
+                "Hawaiian", "Poke",
             ]),
             CuisineGroup(name: "Mexican", cuisines: [
-                "Mexican", "Tacos", "Tex-Mex"
+                "Mexican", "Tacos", "Tex-Mex",
             ]),
             CuisineGroup(name: "Brazilian", cuisines: ["Brazilian"]),
             CuisineGroup(name: "Colombian", cuisines: ["Colombian"]),
@@ -243,7 +243,7 @@ enum CuisineHierarchy {
             CuisineGroup(name: "Venezuelan", cuisines: ["Venezuelan"]),
             CuisineGroup(name: "Cuban", cuisines: ["Cuban"]),
             CuisineGroup(name: "Peruvian", cuisines: ["Peruvian"]),
-            CuisineGroup(name: "Caribbean", cuisines: ["Caribbean"])
+            CuisineGroup(name: "Caribbean", cuisines: ["Caribbean"]),
         ]),
 
         // MARK: Country entries under Americas (only countries with sub-cuisines)
@@ -252,38 +252,38 @@ enum CuisineHierarchy {
             CuisineGroup(name: "American", cuisines: [
                 "American", "Burger", "Steakhouse", "Diner", "Soul Food",
                 "Cajun", "Creole", "Wings", "Hot Dog", "Donuts",
-                "Hawaiian", "Poke"
-            ])
+                "Hawaiian", "Poke",
+            ]),
         ]),
         CuisineRegion(name: "🇲🇽 Mexican", isContinent: false, groups: [
             CuisineGroup(name: "Mexican", cuisines: [
-                "Mexican", "Tacos", "Tex-Mex"
-            ])
+                "Mexican", "Tacos", "Tex-Mex",
+            ]),
         ]),
 
         // MARK: - 🥗 Dietary (top-level group)
 
         CuisineRegion(name: "🥗 Dietary", isContinent: true, groups: [
             CuisineGroup(name: "Dietary", cuisines: [
-                "Vegetarian", "Vegan", "Halal", "Kosher", "Organic"
-            ])
+                "Vegetarian", "Vegan", "Halal", "Kosher", "Organic",
+            ]),
         ]),
 
         // MARK: - 🍽 General (top-level group)
 
         CuisineRegion(name: "🍽 General", isContinent: true, groups: [
             CuisineGroup(name: "Mains", cuisines: [
-                "Seafood", "BBQ", "Noodle", "Sandwich", "Fried Chicken", "Deli"
+                "Seafood", "BBQ", "Noodle", "Sandwich", "Fried Chicken", "Deli",
             ]),
             CuisineGroup(name: "Breakfast & Brunch", cuisines: [
-                "Breakfast", "Brunch", "Waffles", "Pancakes"
+                "Breakfast", "Brunch", "Waffles", "Pancakes",
             ]),
             CuisineGroup(name: "Café & Dessert", cuisines: [
-                "Café", "Bakery", "Ice Cream", "Dessert", "Juice Bar"
+                "Café", "Bakery", "Ice Cream", "Dessert", "Juice Bar",
             ]),
             CuisineGroup(name: "Drinks", cuisines: [
-                "Wine Bar"
-            ])
-        ])
+                "Wine Bar",
+            ]),
+        ]),
     ]
 }

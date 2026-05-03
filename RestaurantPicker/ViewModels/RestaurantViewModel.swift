@@ -4,13 +4,21 @@ import Foundation
 
 /// ViewModel for managing restaurant data and user interactions.
 ///
-/// This class coordinates between the view layer and services,
+/// This class coordinates between the view layer and the `SearchOrchestrator`,
 /// handling restaurant fetching, filtering, and random selection.
 ///
 /// Restaurant results are **cached by location** so that changing the
 /// distance filter or returning to a previously-visited location
 /// never triggers a redundant network search. The refresh button
 /// clears the cache for the current location and forces a re-fetch.
+///
+/// ## Search Model
+///
+/// A single `SearchOrchestrator` runs continuously in the background.
+/// Calling `fetchNearbyRestaurants()` enqueues the resolved location into
+/// the orchestrator rather than cancelling in-flight requests. The
+/// orchestrator finishes any running `MKLocalSearch` batch (≈ 200 ms),
+/// then pivots to the new location without rate-limit disruption.
 @MainActor
 final class RestaurantViewModel: ObservableObject {
     // MARK: - Published Properties
@@ -34,18 +42,14 @@ final class RestaurantViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     /// Filter radius in meters. Set to nil to show all restaurants.
-    @Published var filterRadius: Double? = 1000 {
-        didSet {
-            applyFilter()
-        }
+    @Published var filterRadius: Double? = 500 {
+        didSet { applyFilter() }
     }
 
     /// Cuisines to include in the filtered list. Empty set means show all cuisines.
     @Published var selectedCuisines: Set<String> = [] {
         didSet {
             applyFilter()
-            // Trigger a targeted re-search for selected cuisines to find
-            // restaurants that may not have appeared in the initial broad search
             if !selectedCuisines.isEmpty {
                 Task { await fetchCuisineSpecific(selectedCuisines) }
             }
@@ -54,24 +58,17 @@ final class RestaurantViewModel: ObservableObject {
 
     /// Cuisines to exclude from the filtered list. Empty set means exclude nothing.
     @Published var excludedCuisines: Set<String> = [] {
-        didSet {
-            applyFilter()
-        }
+        didSet { applyFilter() }
     }
 
     /// Minimum star rating to include. Nil means show all (no rating filter).
-    /// Pyramidal: setting 2 shows restaurants rated 2, 3, 4, and 5.
     @Published var minimumRating: Int? {
-        didSet {
-            applyFilter()
-        }
+        didSet { applyFilter() }
     }
 
     /// Text to filter restaurants by name or category. Empty = no text filter.
     @Published var searchText: String = "" {
-        didSet {
-            applyFilter()
-        }
+        didSet { applyFilter() }
     }
 
     /// Whether to show the selected restaurant sheet.
@@ -86,30 +83,37 @@ final class RestaurantViewModel: ObservableObject {
     /// Cancellable for observing location override changes.
     private var overrideCancellable: AnyCancellable?
 
-    /// The currently running search task, cancelled when a new search starts.
-    private var searchTask: Task<Void, Never>?
+    /// Orchestrator that schedules all MapKit batch work.
+    private let orchestrator: SearchOrchestrator
+
+    /// Long-running task that consumes `orchestrator.updates`.
+    private var orchestratorTask: Task<Void, Never>?
+
+    /// ID of the orchestrator job that maps to the current UI location.
+    private var currentSearchJobID: UUID?
 
     // MARK: - Search Cache
 
     /// A completed search result for a specific location.
-    /// All restaurants ever found near this location are accumulated here.
     private struct SearchCacheEntry {
         let location: CLLocation
         let searchRadius: Double
         var restaurants: [Restaurant]
+        let lastPrefetchDate: Date
     }
 
     /// Cache of search results keyed by location.
-    /// New search results merge into existing entries within 50m.
     private var searchCache: [SearchCacheEntry] = []
 
     /// Maximum distance (in metres) between two locations to consider
     /// them the same for caching purposes.
     private static let cacheSameLocationThreshold: Double = 50.0
 
-    /// The search radius used for `searchRestaurants` network calls.
-    /// Always 10km. The UI `filterRadius` is applied client-side on top of this.
-    private static let networkSearchRadius: Double = 10000
+    /// Time-to-live for cache entries (2 weeks).
+    private static let cacheTTL: TimeInterval = 14 * 24 * 3600
+
+    /// The search radius used for network calls. Always 10 km; UI filter applied client-side.
+    private static let networkSearchRadius: Double = SearchOrchestrator.networkRadius
 
     // MARK: - Initialization
 
@@ -125,10 +129,13 @@ final class RestaurantViewModel: ObservableObject {
         searchService: RestaurantSearchService? = nil,
         ratingStore: RatingStore? = nil
     ) {
+        let service = searchService ?? RestaurantSearchService()
         self.locationManager = locationManager ?? LocationManager()
-        self.searchService = searchService ?? RestaurantSearchService()
+        self.searchService = service
         self.ratingStore = ratingStore ?? RatingStore()
+        orchestrator = SearchOrchestrator(searchService: service)
         observeOverrideLocation()
+        startOrchestratorLoop()
     }
 
     /// Creates a new RestaurantViewModel with pre-loaded restaurants (for testing/previews).
@@ -138,9 +145,11 @@ final class RestaurantViewModel: ObservableObject {
     ///   - ratingStore: Store for user ratings. Defaults to a new instance.
     @MainActor
     init(restaurants: [Restaurant], ratingStore: RatingStore? = nil) {
+        let service = RestaurantSearchService()
         locationManager = LocationManager()
-        searchService = RestaurantSearchService()
+        searchService = service
         self.ratingStore = ratingStore ?? RatingStore()
+        orchestrator = SearchOrchestrator(searchService: service)
         self.restaurants = restaurants
         filteredRestaurants = restaurants
     }
@@ -150,36 +159,24 @@ final class RestaurantViewModel: ObservableObject {
     /// Fetches nearby restaurants based on the effective location.
     ///
     /// Uses the override location (map pin) if set, otherwise falls
-    /// back to the device GPS location. Requests authorization and
-    /// GPS fix only when no override is active.
-    ///
-    /// If a search for the same location (within 50m) and radius is
-    /// already cached, the cached results are used immediately without
-    /// any network requests. Otherwise cancels any in-progress search
-    /// and starts a new one.
+    /// back to the device GPS location. On a cache hit for the resolved
+    /// location, uses cached results immediately. On a miss, enqueues
+    /// the location in `SearchOrchestrator` — no in-flight requests are
+    /// cancelled; the orchestrator finishes the current batch first.
     func fetchNearbyRestaurants() async {
-        // Cancel any in-progress search so it stops consuming rate limits
-        searchTask?.cancel()
-        searchTask = nil
-
         isLoading = true
         errorMessage = nil
 
-        // When an override location is set (map pin), skip authorization
-        // and GPS — use the override directly.
         let location: CLLocation
 
         if let override = locationManager.overrideLocation {
             location = override
         } else {
-            // Request location authorization if not determined
             if locationManager.authorizationStatus == .notDetermined {
                 locationManager.requestAuthorization()
-                // Wait a moment for the user to respond
                 try? await Task.sleep(nanoseconds: 500_000_000)
             }
 
-            // Check authorization status
             guard locationManager.isAuthorized else {
                 if locationManager.isDenied {
                     errorMessage = "Location access denied. Please enable location services in Settings."
@@ -190,10 +187,8 @@ final class RestaurantViewModel: ObservableObject {
                 return
             }
 
-            // Request current location if needed
             if locationManager.currentLocation == nil {
                 locationManager.requestLocation()
-                // Wait for location
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
 
@@ -206,8 +201,9 @@ final class RestaurantViewModel: ObservableObject {
         }
 
         let radius = Self.networkSearchRadius
+        let focusRadius = filterRadius ?? 500
 
-        // Check cache — if we already searched this location, use cached results
+        // Cache hit — use stored results immediately without any network work
         if let cached = findCacheEntry(for: location, radius: radius) {
             restaurants = cached.restaurants
             applyFilter()
@@ -217,13 +213,12 @@ final class RestaurantViewModel: ObservableObject {
             return
         }
 
-        // No cache hit — run the search in a cancellable task
-        let task = Task { [weak self] in
-            guard let self else { return }
-            await runProgressiveSearch(location: location, radius: radius)
-        }
-        searchTask = task
-        await task.value
+        // Enqueue location in orchestrator — results arrive via handleOrchestratorUpdate
+        currentSearchJobID = await orchestrator.enqueueLocation(
+            location,
+            focusRadius: focusRadius
+        )
+        // isLoading flips to false when the first update for currentSearchJobID arrives
     }
 
     /// Selects a random restaurant from the filtered list.
@@ -241,7 +236,6 @@ final class RestaurantViewModel: ObservableObject {
         if minimumRating == nil {
             selectedRestaurant = weightedRandomElement(from: filteredRestaurants)
         } else {
-            // Uniform selection when any rating filter (including unrated) is active
             selectedRestaurant = filteredRestaurants.randomElement()
         }
         showSelectedRestaurant = true
@@ -256,70 +250,110 @@ final class RestaurantViewModel: ObservableObject {
     /// Refreshes the restaurant list by clearing the cache for the current
     /// location and re-fetching from scratch.
     func refresh() async {
-        // Remove cache entry for current location so we re-fetch
         if let location = locationManager.effectiveLocation {
-            searchCache.removeAll { entry in
-                entry.location.distance(from: location) < Self.cacheSameLocationThreshold
+            searchCache.removeAll {
+                $0.location.distance(from: location) < Self.cacheSameLocationThreshold
             }
         }
         await fetchNearbyRestaurants()
     }
 
-    // MARK: - Progressive Search
+    // MARK: - Orchestrator Loop
 
-    /// Runs the progressive search stream and merges results into the cache.
+    /// Starts the long-running task that consumes `orchestrator.updates`.
     ///
-    /// The scatter radius is set to the user's current filter radius (or 500m
-    /// default) so adaptive scatter concentrates on the area being viewed.
-    /// The network search radius (10km) is used as the maxRadius distance filter.
-    private func runProgressiveSearch(location: CLLocation, radius: Double) async {
-        let focusRadius = filterRadius ?? 500
-        let stream = await searchService.searchRestaurants(
-            near: location,
-            radius: radius,
-            focusRadius: focusRadius
-        )
-        var receivedAny = false
+    /// Called once from `init`. Runs on `@MainActor` so all UI mutations in
+    /// `handleOrchestratorUpdate` are safe without extra hops.
+    private func startOrchestratorLoop() {
+        orchestratorTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.orchestrator.start()
+            for await update in self.orchestrator.updates {
+                self.handleOrchestratorUpdate(update)
+            }
+        }
+    }
 
-        do {
-            for try await snapshot in stream {
-                // Check for cancellation between yields
-                guard !Task.isCancelled else { break }
+    /// Processes one update from the orchestrator.
+    ///
+    /// - If the update belongs to `currentSearchJobID`, refreshes the live
+    ///   restaurant list and manages the loading indicators.
+    /// - Otherwise silently merges into the cache (background location work).
+    private func handleOrchestratorUpdate(_ update: OrchestratorUpdate) {
+        if update.jobID == currentSearchJobID {
+            restaurants = update.snapshot
+            applyFilter()
+            errorMessage = nil
 
-                restaurants = snapshot
-                applyFilter()
-                errorMessage = nil
+            if isLoading {
+                isLoading = false
+                isLoadingMore = true
+            }
 
-                if !receivedAny {
-                    // First batch arrived — stop the full-screen spinner,
-                    // switch to the subtle "loading more" indicator.
-                    receivedAny = true
-                    isLoading = false
-                    isLoadingMore = true
+            if update.isJobComplete {
+                isLoadingMore = false
+                if restaurants.isEmpty {
+                    errorMessage = RestaurantSearchService.SearchError.noResults.localizedDescription
                 }
+                updateCache(
+                    for: update.location,
+                    radius: Self.networkSearchRadius,
+                    restaurants: restaurants
+                )
+                scheduleBackgroundPrefetch(for: update.location)
             }
-        } catch {
-            if !receivedAny {
-                errorMessage = error.localizedDescription
+        } else {
+            // Background job for a previous location — update cache silently
+            mergeNewRestaurants(update.snapshot, for: update.location)
+        }
+    }
+
+    /// Enqueues focused+scatter background prefetch jobs for filter radii that
+    /// are larger than the current filter but not yet cached.
+    ///
+    /// Runs smallest-first so the most likely next radius is available soonest.
+    /// Skips radii that already have a valid cache entry (no redundant work).
+    /// The orchestrator processes these after all current-location narrow-pass
+    /// work is exhausted, giving the live search permanent priority.
+    ///
+    /// - Parameter location: The location to prefetch (typically the just-completed
+    ///   primary job's search centre).
+    private func scheduleBackgroundPrefetch(for location: CLLocation) {
+        let currentFocusRadius = filterRadius ?? 500
+        let prefetchRadii: [Double] = [500, 1000, 2000, 5000]
+            .filter { $0 > currentFocusRadius }
+            .filter { radius in
+                findCacheEntry(for: location, radius: Self.networkSearchRadius) == nil ||
+                    !hasCoverageForFocusRadius(radius, at: location)
+            }
+
+        guard !prefetchRadii.isEmpty else { return }
+
+        Task {
+            for radius in prefetchRadii {
+                await orchestrator.enqueueBackgroundPrefetch(
+                    location: location,
+                    focusRadius: radius
+                )
             }
         }
+    }
 
-        // Store final result in cache (only if not cancelled and we have results)
-        if !Task.isCancelled, !restaurants.isEmpty {
-            updateCache(for: location, radius: radius, restaurants: restaurants)
+    /// Returns `true` if the cache already has results from a focused search
+    /// at (or larger than) `focusRadius` for `location`.
+    ///
+    /// Used to avoid scheduling redundant background prefetch jobs.
+    private func hasCoverageForFocusRadius(_ focusRadius: Double, at location: CLLocation) -> Bool {
+        searchCache.contains { entry in
+            entry.location.distance(from: location) < Self.cacheSameLocationThreshold &&
+                entry.searchRadius >= focusRadius
         }
-
-        isLoading = false
-        isLoadingMore = false
     }
 
     // MARK: - Cuisine-Specific Search
 
     /// Performs a targeted search for specific cuisines and merges results
     /// into the main restaurant list. Called when cuisine filters change.
-    ///
-    /// For restaurants already in the list, merges cuisine tags and upgrades
-    /// the display category. For new restaurants, appends them.
     private func fetchCuisineSpecific(_ cuisines: Set<String>) async {
         guard let location = locationManager.effectiveLocation else { return }
 
@@ -335,22 +369,25 @@ final class RestaurantViewModel: ObservableObject {
 
     /// Finds a cache entry matching the given location and radius.
     ///
-    /// A match requires the entry's search radius to be >= the requested
-    /// radius AND the distance between locations to be < 50m.
+    /// Expired entries are removed and return `nil`.
     private func findCacheEntry(for location: CLLocation, radius: Double) -> SearchCacheEntry? {
-        searchCache.first { entry in
+        let now = Date()
+        searchCache.removeAll { entry in
+            entry.location.distance(from: location) < Self.cacheSameLocationThreshold &&
+                now.timeIntervalSince(entry.lastPrefetchDate) > Self.cacheTTL
+        }
+
+        return searchCache.first { entry in
             entry.searchRadius >= radius &&
                 entry.location.distance(from: location) < Self.cacheSameLocationThreshold
         }
     }
 
     /// Updates or creates a cache entry for the given location.
-    ///
-    /// If an entry already exists within 50m, merges the new restaurants
-    /// into it and keeps the larger search radius. Otherwise creates a new entry.
     private func updateCache(for location: CLLocation, radius: Double, restaurants: [Restaurant]) {
-        if let idx = searchCache.firstIndex(where: { entry in
-            entry.location.distance(from: location) < Self.cacheSameLocationThreshold
+        let now = Date()
+        if let idx = searchCache.firstIndex(where: {
+            $0.location.distance(from: location) < Self.cacheSameLocationThreshold
         }) {
             let merged = Self.mergeRestaurantLists(
                 existing: searchCache[idx].restaurants, new: restaurants
@@ -358,11 +395,13 @@ final class RestaurantViewModel: ObservableObject {
             searchCache[idx] = SearchCacheEntry(
                 location: location,
                 searchRadius: max(radius, searchCache[idx].searchRadius),
-                restaurants: merged
+                restaurants: merged,
+                lastPrefetchDate: now
             )
         } else {
             searchCache.append(SearchCacheEntry(
-                location: location, searchRadius: radius, restaurants: restaurants
+                location: location, searchRadius: radius, restaurants: restaurants,
+                lastPrefetchDate: now
             ))
         }
     }
@@ -371,60 +410,65 @@ final class RestaurantViewModel: ObservableObject {
 
     /// Merges new restaurant results into the master list and updates the UI.
     ///
-    /// Deduplicates by name + proximity (within 50m). For duplicates, merges
-    /// cuisine tags and upgrades the display category if the new one is more
-    /// specific. Also updates the cache entry for the given location.
+    /// If the location matches the current effective location, updates the live
+    /// `restaurants` list and applies filters. Otherwise only updates the cache.
     private func mergeNewRestaurants(_ newResults: [Restaurant], for location: CLLocation) {
-        var merged = restaurants
-        var changed = false
-
-        for restaurant in newResults {
-            let key = restaurant.name.lowercased()
-            if let existingIndex = merged.firstIndex(where: { existing in
-                existing.name.lowercased() == key &&
-                    abs(existing.coordinate.latitude - restaurant.coordinate.latitude) < 0.0005 &&
-                    abs(existing.coordinate.longitude - restaurant.coordinate.longitude) < 0.0005
-            }) {
-                // Already in the list — merge cuisine tags
-                let existing = merged[existingIndex]
-                let mergedTags = existing.cuisineTags.union(restaurant.cuisineTags)
-
-                // Upgrade display category if new one is more specific
-                let displayCategory: String? = if let newCat = restaurant.category,
-                                                  !RestaurantSearchService.genericCategories.contains(newCat),
-                                                  RestaurantSearchService.genericCategories
-                                                  .contains(existing.category ?? "") {
-                    newCat
-                } else {
-                    existing.category
-                }
-
-                if mergedTags != existing.cuisineTags || displayCategory != existing.category {
-                    merged[existingIndex] = Restaurant(
-                        id: existing.id,
-                        name: existing.name,
-                        coordinate: existing.coordinate,
-                        distance: existing.distance,
-                        category: displayCategory,
-                        cuisineTags: mergedTags,
-                        phoneNumber: existing.phoneNumber ?? restaurant.phoneNumber,
-                        url: existing.url ?? restaurant.url
-                    )
-                    changed = true
-                }
-            } else {
-                // New restaurant — append
-                merged.append(restaurant)
-                changed = true
-            }
+        let isCurrentLocation: Bool = if let effective = locationManager.effectiveLocation {
+            effective.distance(from: location) < Self.cacheSameLocationThreshold
+        } else {
+            true
         }
 
-        if changed {
-            restaurants = merged.sorted { $0.distance < $1.distance }
-            applyFilter()
+        if isCurrentLocation {
+            var merged = restaurants
+            var changed = false
 
-            // Also update cache
-            updateCache(for: location, radius: Self.networkSearchRadius, restaurants: restaurants)
+            for restaurant in newResults {
+                let key = restaurant.name.lowercased()
+                if let existingIndex = merged.firstIndex(where: { existing in
+                    existing.name.lowercased() == key &&
+                        abs(existing.coordinate.latitude - restaurant.coordinate.latitude) < 0.0005 &&
+                        abs(existing.coordinate.longitude - restaurant.coordinate.longitude) < 0.0005
+                }) {
+                    let existing = merged[existingIndex]
+                    let mergedTags = existing.cuisineTags.union(restaurant.cuisineTags)
+
+                    let displayCategory: String? = if let newCat = restaurant.category,
+                                                      !RestaurantSearchService.genericCategories.contains(newCat),
+                                                      RestaurantSearchService.genericCategories
+                                                      .contains(existing.category ?? "")
+                    {
+                        newCat
+                    } else {
+                        existing.category
+                    }
+
+                    if mergedTags != existing.cuisineTags || displayCategory != existing.category {
+                        merged[existingIndex] = Restaurant(
+                            id: existing.id,
+                            name: existing.name,
+                            coordinate: existing.coordinate,
+                            distance: existing.distance,
+                            category: displayCategory,
+                            cuisineTags: mergedTags,
+                            phoneNumber: existing.phoneNumber ?? restaurant.phoneNumber,
+                            url: existing.url ?? restaurant.url
+                        )
+                        changed = true
+                    }
+                } else {
+                    merged.append(restaurant)
+                    changed = true
+                }
+            }
+
+            if changed {
+                restaurants = merged.sorted { $0.distance < $1.distance }
+                applyFilter()
+                updateCache(for: location, radius: Self.networkSearchRadius, restaurants: restaurants)
+            }
+        } else {
+            updateCache(for: location, radius: Self.networkSearchRadius, restaurants: newResults)
         }
     }
 
@@ -454,9 +498,8 @@ final class RestaurantViewModel: ObservableObject {
     /// triggers a restaurant re-fetch whenever the override is set or cleared.
     private func observeOverrideLocation() {
         overrideCancellable = locationManager.$overrideLocation
-            .dropFirst() // skip the initial nil value
+            .dropFirst()
             .removeDuplicates { lhs, rhs in
-                // Treat two locations within 1m as identical to avoid redundant fetches
                 guard let lhs, let rhs else { return lhs == nil && rhs == nil }
                 return lhs.distance(from: rhs) < 1
             }
@@ -472,34 +515,22 @@ final class RestaurantViewModel: ObservableObject {
     private func applyFilter() {
         var result = restaurants
 
-        // Apply distance filter
         if let radius = filterRadius {
             result = result.filter { $0.distance <= radius }
         }
 
-        // Apply include cuisine filter (matches against cuisineTags)
         if !selectedCuisines.isEmpty {
-            result = result.filter { restaurant in
-                !restaurant.cuisineTags.isDisjoint(with: selectedCuisines)
-            }
+            result = result.filter { !$0.cuisineTags.isDisjoint(with: selectedCuisines) }
         }
 
-        // Apply exclude cuisine filter (matches against cuisineTags)
         if !excludedCuisines.isEmpty {
-            result = result.filter { restaurant in
-                restaurant.cuisineTags.isDisjoint(with: excludedCuisines)
-            }
+            result = result.filter { $0.cuisineTags.isDisjoint(with: excludedCuisines) }
         }
 
-        // Apply minimum rating filter (pyramidal) or unrated-only filter
         if let minRating = minimumRating {
             if minRating == -1 {
-                // Unrated only — show restaurants with nil rating
-                result = result.filter { restaurant in
-                    ratingStore.rating(for: restaurant) == nil
-                }
+                result = result.filter { ratingStore.rating(for: $0) == nil }
             } else {
-                // Pyramidal — show restaurants rated >= minRating (excludes 0/rejected and nil/unrated)
                 result = result.filter { restaurant in
                     guard let rating = ratingStore.rating(for: restaurant) else { return false }
                     return rating >= minRating
@@ -507,7 +538,6 @@ final class RestaurantViewModel: ObservableObject {
             }
         }
 
-        // Apply search text filter
         let trimmed = searchText.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty {
             let query = Self.normalizeForSearch(trimmed)
@@ -521,38 +551,26 @@ final class RestaurantViewModel: ObservableObject {
     }
 
     /// Selects a random restaurant weighted by user rating.
-    ///
-    /// Uses the quadratic weight table from `ratingWeight(for:)`.
     private func weightedRandomElement(from restaurants: [Restaurant]) -> Restaurant? {
-        let weights = restaurants.map { restaurant -> Double in
-            let rating = ratingStore.rating(for: restaurant)
-            return Self.ratingWeight(for: rating)
-        }
-
+        let weights = restaurants.map { Self.ratingWeight(for: ratingStore.rating(for: $0)) }
         let totalWeight = weights.reduce(0, +)
         guard totalWeight > 0 else { return restaurants.randomElement() }
 
         var random = Double.random(in: 0 ..< totalWeight)
         for (index, weight) in weights.enumerated() {
             random -= weight
-            if random < 0 {
-                return restaurants[index]
-            }
+            if random < 0 { return restaurants[index] }
         }
-
         return restaurants.last
     }
 
     /// Normalizes a string for search comparison.
-    ///
-    /// Lowercases and replaces smart/curly quotes with straight equivalents
-    /// so that keyboard-produced characters match stored restaurant names.
     static func normalizeForSearch(_ text: String) -> String {
         text.lowercased()
-            .replacingOccurrences(of: "\u{2018}", with: "'") // left single curly quote
-            .replacingOccurrences(of: "\u{2019}", with: "'") // right single curly quote
-            .replacingOccurrences(of: "\u{201C}", with: "\"") // left double curly quote
-            .replacingOccurrences(of: "\u{201D}", with: "\"") // right double curly quote
+            .replacingOccurrences(of: "\u{2018}", with: "'")
+            .replacingOccurrences(of: "\u{2019}", with: "'")
+            .replacingOccurrences(of: "\u{201C}", with: "\"")
+            .replacingOccurrences(of: "\u{201D}", with: "\"")
     }
 }
 
@@ -560,17 +578,12 @@ final class RestaurantViewModel: ObservableObject {
 
 extension RestaurantViewModel {
     /// Static list of cuisine categories available for filtering.
-    ///
-    /// Derived from the search service's cuisine queries. This ensures
-    /// filter options are always present regardless of which restaurants
-    /// were discovered in the current search.
     static let allCuisines: [String] = RestaurantSearchService.cuisineQueries
         .map(\.label)
         .filter { !RestaurantSearchService.genericCategories.contains($0) }
         .sorted()
 
     /// Unique, sorted list of cuisine categories available for filtering.
-    /// Uses the static list so filters never disappear.
     var availableCuisines: [String] {
         Self.allCuisines
     }
@@ -585,15 +598,6 @@ extension RestaurantViewModel {
 
 extension RestaurantViewModel {
     /// Quadratic weight for a given star rating.
-    ///
-    /// 3 stars is the baseline (weight 1.0). The scale is quadratic:
-    /// - 0 (rejected) → 0.00
-    /// - 1★ → 0.25
-    /// - 2★ → 0.50
-    /// - 3★ → 1.00
-    /// - 4★ → 2.00
-    /// - 5★ → 4.00
-    /// - nil (unrated) → 1.00
     static func ratingWeight(for rating: Int?) -> Double {
         guard let rating else { return 1.0 }
         switch rating {
@@ -608,7 +612,6 @@ extension RestaurantViewModel {
     }
 
     /// Available rating filter options for the UI.
-    /// -1 is a sentinel for "unrated only".
     static let ratingFilterOptions: [(label: String, value: Int?)] = [
         ("All", nil),
         ("Unrated", -1),
@@ -616,7 +619,7 @@ extension RestaurantViewModel {
         ("2+", 2),
         ("3+", 3),
         ("4+", 4),
-        ("5", 5)
+        ("5", 5),
     ]
 }
 
@@ -630,6 +633,6 @@ extension RestaurantViewModel {
         ("2 km", 2000),
         ("5 km", 5000),
         ("10 km", 10000),
-        ("All", nil)
+        ("All", nil),
     ]
 }

@@ -76,7 +76,7 @@ struct RestaurantDetailView: View {
         mapItem.phoneNumber = restaurant.phoneNumber
         mapItem.url = restaurant.url
         mapItem.openInMaps(launchOptions: [
-            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving,
         ])
     }
 

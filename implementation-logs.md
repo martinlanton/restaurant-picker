@@ -1,3 +1,327 @@
+# Implementation Log: Priority-Queue Search Orchestrator (Steps 1–6)
+
+**Date**: 2026-05-03
+**Author**: GitHub Copilot
+
+## Overview
+
+Replaced the cancel-and-restart search model with a single long-running
+`SearchOrchestrator` actor that owns a priority-sorted queue of `SearchJob`
+values. Each job captures full resumable state for one location. The
+orchestrator picks the next atomic unit of work (one `withTaskGroup` batch,
+≈ 200 ms), executes it, updates job state, then picks again — so in-flight
+`MKLocalSearch` requests always complete before switching locations.
+
+## Steps Implemented
+
+### Step 1 — Batch primitives on RestaurantSearchService
+
+Added four internal batch-execution methods to `RestaurantSearchService`:
+
+- **`executeFocusedBatch`** — runs a slice of cuisine queries against the
+  focused region; returns `FocusedBatchResult` (results + saturated queries).
+- **`executePOISearch`** — runs a single `MKLocalPointsOfInterestRequest`
+  over the wide region.
+- **`executeScatterNode`** — runs one level of N/S/E/W + diagonal scatter
+  for a saturated node; returns `ScatterNodeResult` (results + child nodes).
+- **`executeWideBatch`** — runs a slice of cuisine queries against the wide
+  region; no saturation tracking.
+
+Also promoted `SearchNode` → `ScatterNode` as an `internal` struct, and
+added `FocusedBatchResult` and `ScatterNodeResult` result types.
+
+### Step 2 — SearchOrchestrator.swift with three core types
+
+**`ScatterNode`** (internal struct, lives on `RestaurantSearchService`) —
+mirrors the old private `SearchNode`: `query`, `label`, `centre`, `radius`,
+`depth`.
+
+**`SearchJob`** (internal struct) — captures all state for one search location:
+- Identity: `id`, `location`, `focusRadius`, `networkRadius`
+- Phase 1: `nextFocusedBatchIndex`, `poiSearchDone`
+- Phase 2: `pendingScatterNodes: [ScatterNode]`
+- Phase 3: `widePassBatchIndex: Int?` (nil = not started)
+- Accumulator: `accumulated: [(Restaurant, String)]`
+- Derived: `focusedRegion`, `wideRegion`, `isNarrowPassComplete`
+
+**`SearchOrchestrator`** (actor) — drives the run loop:
+- `jobs: [SearchJob]` — all active jobs (no enforced array order; priority is
+  computed dynamically)
+- `currentJobID: UUID?` — ID of the user's current location job
+- `updates: AsyncStream<OrchestratorUpdate>` — stream of snapshots yielded
+  after each completed batch; `nonisolated` so it can be iterated from any
+  actor context
+- `start()` — kicks off the internal run loop in a detached Task
+- `enqueueLocation(_:focusRadius:) -> UUID` — public entry point for
+  location changes
+
+### Step 3 — pickNextWork() scheduling
+
+`pickNextWork()` is a pure synchronous method implementing four priority rules
+in order. It calls `removeCompletedJobs()` first, then `jobsSortedByPriority()`
+to get a distance-ordered view of all jobs:
+
+| Rule | Condition | Work returned |
+|------|-----------|---------------|
+| 1 | Job with `!poiSearchDone` | `.poiSearch(jobID:)` |
+| 1 (cont.) | Job with pending focused batches | `.focusedBatch(jobID:batchIndex:)` |
+| 2 | Job with non-empty `pendingScatterNodes` | `.scatterNode(jobID:)` |
+| 3a | All narrow work done; job with started wide-pass | `.wideBatch(jobID:batchIndex:)` |
+| 3b | All narrow work done; current job eligible for wide-pass | starts wide-pass, returns `.wideBatch` |
+
+`jobsSortedByPriority()` always places `currentJobID`'s job first; other
+jobs are sorted by ascending distance to the current location.
+
+`removeCompletedJobs()` evicts jobs when:
+- Narrow pass complete AND `focusRadius >= networkRadius` (no wide-pass needed), OR
+- Narrow pass complete AND wide-pass finished, OR
+- Narrow pass complete AND NOT current AND wide-pass never started (it never will)
+
+### Step 4 — enqueueLocation(_:focusRadius:)
+
+`enqueueLocation` implements the following contract:
+
+1. **Promote within 50 m** — if an existing job's location is within
+   `sameLocationThreshold` (50 m) of `location`, that job is promoted to
+   `currentJobID` (preserving all accumulated state and any in-progress
+   wide-pass). `signalWorkAvailable()` is called and the existing job's UUID
+   is returned.
+
+2. **Fresh job for a new location** — otherwise a new `SearchJob` is created
+   with `widePassBatchIndex = nil`, appended to `jobs`, set as `currentJobID`,
+   and the run loop is signalled.
+
+3. **Wide-pass eligibility rule on demotion** — the outgoing current job's
+   `widePassBatchIndex` is left untouched:
+   - `nil` → stays `nil`; Rule 3b will never start it (only applies to
+     `currentJobID`).
+   - non-`nil` → survives; Rule 3a resumes it after all narrow work across
+     all jobs is exhausted.
+
+4. **Demoted jobs re-sorted** — `jobsSortedByPriority()` re-evaluates order
+   at every `pickNextWork()` call using distance to the new `currentJobID`,
+   so no explicit sort is needed on enqueue.
+
+## Design Decisions
+
+### Decision 1: Dynamic priority sort instead of sorted insertion
+
+- **Context**: Inserting a new job "at the front" is conceptually simpler but
+  requires explicit re-sorting or index maintenance when `currentJobID` changes.
+- **Decision**: `jobsSortedByPriority()` computes order on-demand. The extra
+  O(n log n) sort runs at most once per batch (≈ 200 ms cadence) and `n` is
+  always very small (≤ 5 jobs in practice).
+
+### Decision 2: Wide-pass not started for demoted jobs
+
+- **Context**: Starting a wide-pass for every demoted job would quadruple
+  MapKit usage on frequent location changes.
+- **Decision**: Rule 3b only starts a wide-pass for `currentJobID`. A demoted
+  job with `widePassBatchIndex == nil` is eventually evicted by
+  `removeCompletedJobs()` — it never gets a wide-pass.
+
+### Decision 3: nonisolated updates stream
+
+- **Context**: `AsyncStream` iteration requires no actor isolation but the
+  `ViewModel` runs on `@MainActor`.
+- **Decision**: `updates` is declared `nonisolated let` so it can be passed
+  to and iterated from any actor context without an extra hop.
+
+## Testing
+
+All 69 existing tests pass. Build succeeded. SwiftFormat clean.
+
+---
+
+# Implementation Log: Priority-Queue Search Orchestrator (Step 5 — ViewModel Refactor)
+
+**Date**: 2026-05-03
+**Author**: GitHub Copilot
+
+## Overview
+
+Completed the ViewModel refactor to drive all search work through
+`SearchOrchestrator`. Removed the old cancel-and-restart model, the explicit
+`backgroundPrefetchTask` / `prefetchQueue`, and `PrefetchJob`. Background
+prefetch for other filter radii is now enqueued as low-priority
+`SearchJob`s via the orchestrator — the same mechanism used for user-driven
+searches, with no special-case scheduler in the ViewModel.
+
+## Changes
+
+### SearchOrchestrator.swift
+
+1. **`isBackgroundPrefetch: Bool` on `SearchJob`** — distinguishes user-driven
+   jobs from background prefetch jobs. `enqueueLocation` skips background jobs
+   during the 50 m promotion check so they are never accidentally elevated to
+   the current UI job.
+
+2. **`enqueueBackgroundPrefetch(location:focusRadius:)`** — creates a new
+   `SearchJob` with `isBackgroundPrefetch = true` without updating
+   `currentJobID`. The job is queued and processed after all narrow-pass work
+   for higher-priority jobs is exhausted. Its updates are routed to the cache
+   rather than the live UI by `handleOrchestratorUpdate` (jobID ≠ currentSearchJobID
+   branch).
+
+### RestaurantViewModel.swift
+
+3. **Single `orchestratorTask`** — started once in `init` via
+   `startOrchestratorLoop()`. Runs forever, consuming `orchestrator.updates`.
+   No `searchTask`, `backgroundPrefetchTask`, or `prefetchQueue`.
+
+4. **`fetchNearbyRestaurants`** — resolves the location (override or GPS),
+   checks the cache, and calls `orchestrator.enqueueLocation(_:focusRadius:)`.
+   No `Task.cancel()` calls — the orchestrator finishes the current batch
+   (≈ 200 ms) before pivoting to the new location.
+
+5. **`handleOrchestratorUpdate`** — routes updates by `jobID`:
+   - `jobID == currentSearchJobID` → updates `restaurants`, calls `applyFilter()`,
+     manages `isLoading`/`isLoadingMore`, writes cache on `isJobComplete`.
+   - Else → calls `mergeNewRestaurants` which updates cache and, if the location
+     matches the effective location, also updates the live `restaurants` list.
+
+6. **`scheduleBackgroundPrefetch(for:)`** — called when the primary job
+   completes. Enqueues background jobs (smallest-first) for standard focus
+   radii (500 m, 1 km, 2 km, 5 km) larger than the current `filterRadius`
+   that are not yet in the cache. Each background job runs Phase 1 (focused
+   batches) + Phase 2 (scatter) for its focus radius, providing better scatter
+   coverage for the radii the user is likely to switch to next. Phase 3
+   (wide-pass at 10 km) is NOT repeated — it was already completed by the
+   primary job.
+
+7. **`hasCoverageForFocusRadius(_:at:)`** — checks the cache to prevent
+   redundant background jobs for radii already fully cached.
+
+8. **Removed**: `startBackgroundPrefetch`, `processPrefetchQueue`,
+   `runProgressiveSearch`, `PrefetchJob`, `backgroundPrefetchTask`,
+   `prefetchQueue`.
+
+## Background Prefetch Lifecycle
+
+```
+Primary job (500 m focus) completes
+  └─ scheduleBackgroundPrefetch enqueues: 1 km, 2 km, 5 km jobs
+       (all isBackgroundPrefetch = true, never currentJobID)
+
+Orchestrator runs background jobs after all narrow work:
+  1 km focused+scatter → mergeNewRestaurants → cache updated, UI merged
+  2 km focused+scatter → mergeNewRestaurants → cache updated, UI merged
+  5 km focused+scatter → mergeNewRestaurants → cache updated, UI merged
+
+User changes filterRadius to 2 km → applyFilter() shows already-merged results
+```
+
+## Design Decisions
+
+### Decision 1: isBackgroundPrefetch flag vs separate queue
+
+- **Context**: `enqueueLocation` promotes any job within 50 m to `currentJobID`.
+  A background prefetch job at the same coordinates would be incorrectly
+  promoted to the current UI job.
+- **Decision**: Added `isBackgroundPrefetch: Bool` to `SearchJob`. `enqueueLocation`
+  skips jobs with this flag. The flag is minimal — it's the only special-casing
+  needed in the orchestrator.
+- **Consequences**: Background jobs never become the current job, even if the
+  user's location exactly matches a background prefetch location.
+
+### Decision 2: No wide-pass for background prefetch jobs
+
+- **Context**: The primary job already runs a wide-pass at 10 km covering all
+  restaurants within the network radius.
+- **Decision**: Background prefetch jobs are evicted by `removeCompletedJobs`
+  after their narrow pass since `widePassBatchIndex == nil` and `id != currentJobID`.
+  Re-running the wide-pass for each background radius would triple MapKit usage
+  with no benefit.
+
+### Decision 3: Smallest-first scheduling
+
+- **Context**: If the user widens the filter, they're most likely to go to
+  the next larger radius (500 m → 1 km → 2 km).
+- **Decision**: Background radii are enqueued smallest-first so the most likely
+  next radius is cached soonest.
+
+## Testing
+
+All 69 tests pass. Build succeeded. SwiftFormat clean.
+
+---
+
+ # Implementation Log: Background Prefetch All Radii with Priority Queue & TTL
+
+**Date**: 2026-04-16
+**Author**: GitHub Copilot
+
+## Overview
+
+After the primary search (500m focused + scatter + 10km wide) completes,
+background prefetch runs the full 3-phase search for each remaining radius
+(1km, 2km, 5km, 10km) smallest-first. On location change, the new location's
+prefetch takes priority but old-location jobs continue at lower priority.
+Cache entries carry a 2-week TTL; expired entries are fully cleared.
+
+## Changes
+
+### RestaurantViewModel.swift
+
+1. **`lastPrefetchDate: Date` on `SearchCacheEntry`** — set to `Date()` in
+   `updateCache`. `findCacheEntry` removes entries older than 2 weeks before
+   returning, triggering a fresh search on next access.
+
+2. **`cacheTTL = 14 * 24 * 3600`** (2 weeks) — entries older than this are
+   fully cleared (all restaurants purged) to ensure closed restaurants don't
+   persist and new restaurants are discovered.
+
+3. **`PrefetchJob` struct** — `(location, focusRadius, priority)`. Priority 0
+   = current/new location, priority 1 = previous location. Queue sorted by
+   priority ascending, then focusRadius ascending (smallest first).
+
+4. **`startBackgroundPrefetch(for:)`** — demotes existing jobs for other
+   locations to priority 1, builds new priority-0 jobs for radii not yet
+   cached, sorts the queue, cancels and restarts `backgroundPrefetchTask`.
+
+5. **`processPrefetchQueue()`** — processes jobs sequentially: runs
+   `searchRestaurants(near:radius:focusRadius:)` for each, consumes the
+   stream silently, merges results via `mergeNewRestaurants`, 200ms delay
+   between jobs. Checks `Task.isCancelled` between jobs.
+
+6. **`hasValidCacheEntry(for:focusRadius:)`** — checks if a non-expired
+   cache entry already covers a given focus radius. Used to skip redundant
+   prefetch jobs.
+
+7. **`mergeNewRestaurants` location check** — if the merge location doesn't
+   match the current effective location (background prefetch for a previous
+   location), only the cache is updated — the UI `restaurants` list is not
+   touched.
+
+8. **`refresh()`** — now cancels `backgroundPrefetchTask`, clears
+   `prefetchQueue`, and removes all cache entries for the current location
+   before re-fetching.
+
+9. **`runProgressiveSearch`** — calls `startBackgroundPrefetch(for:)` after
+   the primary search completes and `isLoadingMore` is set to false.
+
+## Prefetch Order
+
+For default 500m filter radius: 1km → 2km → 5km → 10km (smallest first).
+Each prefetch runs all 3 phases (focused + scatter + wide). Deduplication
+handles overlap with previously discovered restaurants.
+
+## Location Change Behaviour
+
+1. User changes location via map pin
+2. `fetchNearbyRestaurants` cancels the primary `searchTask`
+3. New primary search runs at 500m for the new location
+4. After completing, `startBackgroundPrefetch` demotes old-location jobs
+   to priority 1, adds new-location jobs at priority 0
+5. New location's radii process first (1km, 2km, 5km, 10km)
+6. Old location's remaining radii continue after
+
+## Testing
+
+All tests pass. Build succeeded. SwiftFormat + SwiftLint clean.
+
+---
+
 # Implementation Log: Focused-Region Search + 3-Phase Architecture
 
 **Date**: 2026-04-14
@@ -562,3 +886,72 @@ The restaurant list automatically re-fetches when the pin is placed or cleared.
 - Build succeeds.
 - All 63 unit tests + 3 UI tests pass.
 - SwiftFormat and SwiftLint applied to all changed files.
+
+---
+
+# Implementation Log: Priority-Queue Orchestrator — Step 6 (Tests)
+
+**Date**: 2026-05-03
+**Author**: GitHub Copilot
+
+## Overview
+
+Completed step 6 of the Priority-Queue Search Orchestrator plan: added
+`SearchOrchestratorTests.swift` with comprehensive scheduling tests, fixed
+project file references so all new files compile correctly, and added internal
+test-helper methods to `SearchOrchestrator` to allow actor-isolated state
+mutation from test code without violating Swift concurrency rules.
+
+## Changes
+
+### SearchOrchestratorTests.swift
+
+New test suite covering:
+
+- **enqueueLocation** — returns a UUID, sets `currentJobID`, promotes existing
+  jobs within the 50 m threshold, creates new jobs beyond the threshold, updates
+  `currentJobID` on new location.
+- **enqueueBackgroundPrefetch** — does not change `currentJobID`, adds a job,
+  marks the job `isBackgroundPrefetch = true`.
+- **Location-doesn't-promote-background** — enqueuing a user location at the
+  same coordinates as an existing background job creates a fresh user-driven
+  job rather than promoting the background one.
+- **pickNextWork scheduling** — nil when no jobs, POI search first, focused
+  batch after POI done, scatter node after all focused batches, wide-pass starts
+  for current job after narrow pass complete, wide-pass does NOT start for
+  non-current jobs, current job prioritised over older jobs.
+- **Wide-pass survival** — a started wide-pass survives location change and
+  remains in the jobs array with its batch index intact.
+- **Eviction** — a demoted job with no started wide-pass is evicted once its
+  narrow pass completes.
+- **Distance ordering** — current job is always served first regardless of
+  insertion order.
+
+### SearchOrchestrator.swift
+
+Added four internal test-helper methods (tagged "Intended for use in unit
+tests only"):
+
+- `setJobPoiSearchDone(_:forJobID:)`
+- `setJobNextFocusedBatchIndex(_:forJobID:)`
+- `setJobPendingScatterNodes(_:forJobID:)`
+- `setJobWidePassBatchIndex(_:forJobID:)`
+
+These allow tests to set up specific job states without starting the run loop
+or making real MapKit requests, while respecting Swift actor-isolation rules
+(tests call these `async` methods which hop onto the actor to perform the
+mutation safely).
+
+Also changed `BatchWork` enum from `private` to `internal` so
+`pickNextWork()` (which is `internal` for test access) can return it without
+a compiler visibility error.
+
+### project.pbxproj
+
+Added missing `PBXFileReference`, `PBXBuildFile`, group membership, and
+`Sources` build-phase entries for `SearchOrchestrator.swift` (main target)
+and `SearchOrchestratorTests.swift` (test target).
+
+## Test Results
+
+All 80 unit tests + 3 UI tests pass (`** TEST SUCCEEDED **`).

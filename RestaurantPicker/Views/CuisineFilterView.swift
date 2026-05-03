@@ -134,7 +134,8 @@ struct CuisineFilterView: View {
             // hidden when nothing is open so Layout always has the same child count.
             if let name = openRegion,
                let region = regions.first(where: { $0.name == name }),
-               hasPanel {
+               hasPanel
+            {
                 subCuisinePanel(for: region)
             } else {
                 Color.clear.frame(width: 0, height: 0)
@@ -314,9 +315,11 @@ struct CuisineFilterView: View {
 
     private func toggle(cuisine: String) {
         if filterMode == .include {
-            if selectedCuisines.contains(cuisine) { selectedCuisines.remove(cuisine) } else { excludedCuisines.remove(cuisine); selectedCuisines.insert(cuisine) }
+            if selectedCuisines.contains(cuisine) { selectedCuisines.remove(cuisine) }
+            else { excludedCuisines.remove(cuisine); selectedCuisines.insert(cuisine) }
         } else {
-            if excludedCuisines.contains(cuisine) { excludedCuisines.remove(cuisine) } else { selectedCuisines.remove(cuisine); excludedCuisines.insert(cuisine) }
+            if excludedCuisines.contains(cuisine) { excludedCuisines.remove(cuisine) }
+            else { selectedCuisines.remove(cuisine); excludedCuisines.insert(cuisine) }
         }
     }
 
@@ -325,7 +328,8 @@ struct CuisineFilterView: View {
             if state == .all {
                 if filterMode == .include { selectedCuisines.remove(leaf) } else { excludedCuisines.remove(leaf) }
             } else {
-                if filterMode == .include { excludedCuisines.remove(leaf); selectedCuisines.insert(leaf) } else { selectedCuisines.remove(leaf); excludedCuisines.insert(leaf) }
+                if filterMode == .include { excludedCuisines.remove(leaf); selectedCuisines.insert(leaf) }
+                else { selectedCuisines.remove(leaf); excludedCuisines.insert(leaf) }
             }
         }
     }

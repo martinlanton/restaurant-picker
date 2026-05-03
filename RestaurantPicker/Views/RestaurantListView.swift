@@ -55,7 +55,7 @@ struct RestaurantListView: View {
                 category: "Japanese",
                 phoneNumber: nil,
                 url: nil
-            )
+            ),
         ],
         selectedRestaurant: nil
     )

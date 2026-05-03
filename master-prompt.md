@@ -7,8 +7,9 @@ This repository implements an iOS application that helps users randomly select n
 **Key Features**:
 - Display restaurants from Apple Maps within a specified radius
 - 3-phase progressive search: (1) focused queries using the user's filter radius as the MKLocalSearch region for maximum nearby coverage, (2) adaptive scatter for saturated queries, (3) wide-radius pass at 10km to pre-cache distant results
-- Adaptive scatter search: queries that hit the 25-result MapKit cap are automatically re-run from offset centre points, recursively subdividing dense areas up to depth 3. Scatter radius matches the user's filter radius (e.g. 1km → 500m → 250m → 125m at depth 3)
-- Location-based search cache: results are cached by location (50m threshold) so changing the distance filter or revisiting a location loads instantly from cache. Refresh button clears the cache
+- Adaptive scatter search: queries that hit the 25-result MapKit cap are automatically re-run from offset centre points, recursively subdividing dense areas up to depth 3. Scatter radius matches the user's filter radius (e.g. 500m → 250m → 125m → 62.5m at depth 3)
+- Background prefetch: after the primary search completes, the remaining distance radii (1km, 2km, 5km, 10km) are searched in the background smallest-first. On location change, the new location takes priority but old-location prefetch continues at lower priority
+- Location-based search cache with 2-week TTL: results are cached by location (50m threshold). Cache entries expire after 2 weeks and are fully cleared to purge closed restaurants. Refresh button clears the cache immediately
 - Search cancellation: starting a new search cancels any in-progress search via Task cancellation + AsyncThrowingStream onTermination, freeing MapKit rate limits for the new search
 - Filter restaurants by distance (configurable)
 - Search restaurants by name or category
