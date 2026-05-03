@@ -52,6 +52,25 @@ struct StarRatingView: View {
         }
     }
 
+    // MARK: - Reject Button Helpers
+
+    /// The SF Symbol name used for the reject button in every rating state.
+    ///
+    /// Visual differentiation between "rejected" (rating 0) and "not rejected"
+    /// is handled exclusively by colour — the icon itself never changes.
+    /// Exposed as `internal` so it can be verified in unit tests.
+    static let rejectIconSystemName = "nosign"
+
+    /// Returns the foreground colour for the reject button.
+    ///
+    /// - Parameter rating: The current rating value (nil = unrated, 0 = rejected, 1–5 = starred).
+    /// - Returns: `.red` when the restaurant is rejected (rating == 0), grey otherwise.
+    ///
+    /// Exposed as `internal` so it can be verified in unit tests.
+    static func rejectButtonColor(for rating: Int?) -> Color {
+        rating == 0 ? .red : .gray.opacity(0.3)
+    }
+
     // MARK: - Private Views
 
     private var starsRow: some View {
@@ -71,9 +90,9 @@ struct StarRatingView: View {
     }
 
     private var rejectButton: some View {
-        Image(systemName: rating == 0 ? "nosign" : "nosign")
+        Image(systemName: Self.rejectIconSystemName)
             .font(.system(size: starSize))
-            .foregroundColor(rejectColor)
+            .foregroundColor(Self.rejectButtonColor(for: rating))
             .onTapGesture {
                 guard isInteractive else { return }
                 if rating == 0 {
@@ -82,14 +101,6 @@ struct StarRatingView: View {
                     rating = 0
                 }
             }
-    }
-
-    private var rejectColor: Color {
-        if rating == 0 {
-            .red
-        } else {
-            .gray.opacity(0.3)
-        }
     }
 
     /// Returns the appropriate star view for a given position.
