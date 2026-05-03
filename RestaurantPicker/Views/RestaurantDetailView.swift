@@ -43,7 +43,7 @@ struct RestaurantDetailView: View {
 
                 // Open in Maps button
                 Button {
-                    openInMaps()
+                    restaurant.openInMaps()
                 } label: {
                     Label("Open in Maps", systemImage: "map.fill")
                         .font(.subheadline)
@@ -68,17 +68,6 @@ struct RestaurantDetailView: View {
     }
 
     // MARK: - Private Methods
-
-    private func openInMaps() {
-        let placemark = MKPlacemark(coordinate: restaurant.coordinate)
-        let mapItem = MKMapItem(placemark: placemark)
-        mapItem.name = restaurant.name
-        mapItem.phoneNumber = restaurant.phoneNumber
-        mapItem.url = restaurant.url
-        mapItem.openInMaps(launchOptions: [
-            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving,
-        ])
-    }
 
     private var ratingBinding: Binding<Int?> {
         Binding(

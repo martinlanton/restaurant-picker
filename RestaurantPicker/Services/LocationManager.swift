@@ -1,3 +1,4 @@
+import Combine
 import CoreLocation
 import Foundation
 
@@ -17,7 +18,7 @@ import Foundation
 /// }
 /// ```
 @MainActor
-final class LocationManager: NSObject, ObservableObject {
+final class LocationManager: NSObject, ObservableObject, LocationManaging {
     // MARK: - Published Properties
 
     /// The current location of the user.
@@ -55,6 +56,14 @@ final class LocationManager: NSObject, ObservableObject {
     /// otherwise falls back to the device GPS location.
     var effectiveLocation: CLLocation? {
         overrideLocation ?? currentLocation
+    }
+
+    /// A publisher that emits whenever `overrideLocation` changes.
+    ///
+    /// Satisfies the `LocationManaging` protocol requirement so the ViewModel
+    /// can observe override changes without coupling to `@Published` directly.
+    var overrideLocationPublisher: AnyPublisher<CLLocation?, Never> {
+        $overrideLocation.eraseToAnyPublisher()
     }
 
     /// Sets a manual location override from the map tab.

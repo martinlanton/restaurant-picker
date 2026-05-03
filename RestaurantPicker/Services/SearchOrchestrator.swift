@@ -56,7 +56,7 @@ struct SearchJob {
     ///
     /// New child nodes produced by `executeScatterNode` are prepended so that
     /// depth-first ordering is maintained within each cuisine query.
-    var pendingScatterNodes: [RestaurantSearchService.ScatterNode] = []
+    var pendingScatterNodes: [ScatterNode] = []
 
     // MARK: Phase 3 — Wide pass
 
@@ -191,7 +191,7 @@ actor SearchOrchestrator {
 
     // MARK: - Dependencies
 
-    private let searchService: RestaurantSearchService
+    private let searchService: any RestaurantSearching
 
     // MARK: - Job Queue
 
@@ -231,7 +231,7 @@ actor SearchOrchestrator {
     ///
     /// - Parameter searchService: The search service to use for MapKit requests.
     ///   Defaults to a fresh `RestaurantSearchService` instance.
-    init(searchService: RestaurantSearchService = RestaurantSearchService()) {
+    init(searchService: any RestaurantSearching = RestaurantSearchService()) {
         self.searchService = searchService
         var continuation: AsyncStream<OrchestratorUpdate>.Continuation?
         updates = AsyncStream { continuation = $0 }
@@ -340,7 +340,7 @@ actor SearchOrchestrator {
     ///
     /// Intended for use in unit tests only — not called by production code.
     func setJobPendingScatterNodes(
-        _ nodes: [RestaurantSearchService.ScatterNode],
+        _ nodes: [ScatterNode],
         forJobID id: UUID
     ) {
         guard let idx = jobs.firstIndex(where: { $0.id == id }) else { return }
@@ -520,7 +520,7 @@ actor SearchOrchestrator {
         jobs[idx].nextFocusedBatchIndex = batchIndex + 1
 
         let newNodes = result.saturatedQueries.map { saturated in
-            RestaurantSearchService.ScatterNode(
+            ScatterNode(
                 query: saturated.query,
                 label: saturated.label,
                 centre: snapshot.location.coordinate,

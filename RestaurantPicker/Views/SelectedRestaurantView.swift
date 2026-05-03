@@ -61,7 +61,7 @@ struct SelectedRestaurantView: View {
                     }
 
                     Button {
-                        openInMaps()
+                        restaurant.openInMaps()
                     } label: {
                         Label("Open in Maps", systemImage: "map")
                             .frame(maxWidth: .infinity)
@@ -110,16 +110,8 @@ struct SelectedRestaurantView: View {
             UIApplication.shared.open(url)
         }
     }
-
-    private func openInMaps() {
-        let placemark = MKPlacemark(coordinate: restaurant.coordinate)
-        let mapItem = MKMapItem(placemark: placemark)
-        mapItem.name = restaurant.name
-        mapItem.openInMaps(launchOptions: [
-            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving,
-        ])
-    }
 }
+
 
 // MARK: - Preview
 

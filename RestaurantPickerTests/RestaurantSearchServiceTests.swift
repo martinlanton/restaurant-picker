@@ -175,11 +175,11 @@ final class RestaurantSearchServiceTests: XCTestCase {
     }
 
     func testDeduplicatePreservesPhoneNumberFromFirstEntry() {
-        // Arrange — first occurrence has a phone number
+        // Arrange — first occurrence has a phone number, same coords as r2
         let r1 = Restaurant(
             id: UUID(),
             name: "Noodle House",
-            coordinate: .init(latitude: 40.71, longitude: -74.00),
+            coordinate: .init(latitude: 40.7128, longitude: -74.0060),
             distance: 300,
             category: "Noodle",
             cuisineTags: [],

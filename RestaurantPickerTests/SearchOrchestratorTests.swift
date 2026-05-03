@@ -217,7 +217,7 @@ final class SearchOrchestratorTests: XCTestCase {
         await orchestrator.setJobNextFocusedBatchIndex(totalBatches, forJobID: id)
 
         // Add a scatter node to the job
-        let scatterNode = RestaurantSearchService.ScatterNode(
+        let scatterNode = ScatterNode(
             query: "ramen restaurant",
             label: "Ramen",
             centre: newYork.coordinate,

@@ -76,8 +76,8 @@ final class RestaurantViewModel: ObservableObject {
 
     // MARK: - Dependencies
 
-    private let locationManager: LocationManager
-    private let searchService: RestaurantSearchService
+    private let locationManager: any LocationManaging
+    private let searchService: any RestaurantSearching
     private(set) var ratingStore: RatingStore
 
     /// Cancellable for observing location override changes.
@@ -123,13 +123,13 @@ final class RestaurantViewModel: ObservableObject {
     /// Creates a new RestaurantViewModel with dependencies.
     ///
     /// - Parameters:
-    ///   - locationManager: Manager for user location. Defaults to a new instance.
-    ///   - searchService: Service for searching restaurants. Defaults to a new instance.
+    ///   - locationManager: Manager for user location. Defaults to a new `LocationManager` instance.
+    ///   - searchService: Service for searching restaurants. Defaults to a new `RestaurantSearchService` instance.
     ///   - ratingStore: Store for user ratings. Defaults to a new instance.
     @MainActor
     init(
-        locationManager: LocationManager? = nil,
-        searchService: RestaurantSearchService? = nil,
+        locationManager: (any LocationManaging)? = nil,
+        searchService: (any RestaurantSearching)? = nil,
         ratingStore: RatingStore? = nil
     ) {
         let service = searchService ?? RestaurantSearchService()
@@ -425,55 +425,30 @@ final class RestaurantViewModel: ObservableObject {
             true
         }
 
-        if isCurrentLocation {
-            var merged = restaurants
-            var changed = false
+        guard isCurrentLocation else {
+            updateCache(for: location, radius: Self.networkSearchRadius, restaurants: newResults)
+            return
+        }
 
-            for restaurant in newResults {
-                let key = restaurant.name.lowercased()
-                if let existingIndex = merged.firstIndex(where: { existing in
-                    existing.name.lowercased() == key &&
-                        abs(existing.coordinate.latitude - restaurant.coordinate.latitude) < 0.0005 &&
-                        abs(existing.coordinate.longitude - restaurant.coordinate.longitude) < 0.0005
-                }) {
-                    let existing = merged[existingIndex]
-                    let mergedTags = existing.cuisineTags.union(restaurant.cuisineTags)
+        var merged = restaurants
+        var changed = false
 
-                    let displayCategory: String? = if let newCat = restaurant.category,
-                                                      !RestaurantSearchService.genericCategories.contains(newCat),
-                                                      RestaurantSearchService.genericCategories
-                                                      .contains(existing.category ?? "") {
-                        newCat
-                    } else {
-                        existing.category
-                    }
-
-                    if mergedTags != existing.cuisineTags || displayCategory != existing.category {
-                        merged[existingIndex] = Restaurant(
-                            id: existing.id,
-                            name: existing.name,
-                            coordinate: existing.coordinate,
-                            distance: existing.distance,
-                            category: displayCategory,
-                            cuisineTags: mergedTags,
-                            phoneNumber: existing.phoneNumber ?? restaurant.phoneNumber,
-                            url: existing.url ?? restaurant.url
-                        )
-                        changed = true
-                    }
-                } else {
-                    merged.append(restaurant)
+        for restaurant in newResults {
+            if let idx = merged.firstIndex(where: { Self.isSamePlace($0, as: restaurant) }) {
+                if let updated = Self.merged(merged[idx], with: restaurant) {
+                    merged[idx] = updated
                     changed = true
                 }
+            } else {
+                merged.append(restaurant)
+                changed = true
             }
+        }
 
-            if changed {
-                restaurants = merged.sorted { $0.distance < $1.distance }
-                applyFilter()
-                updateCache(for: location, radius: Self.networkSearchRadius, restaurants: restaurants)
-            }
-        } else {
-            updateCache(for: location, radius: Self.networkSearchRadius, restaurants: newResults)
+        if changed {
+            restaurants = merged.sorted { $0.distance < $1.distance }
+            applyFilter()
+            updateCache(for: location, radius: Self.networkSearchRadius, restaurants: restaurants)
         }
     }
 
@@ -486,26 +461,63 @@ final class RestaurantViewModel: ObservableObject {
         new: [Restaurant]
     ) -> [Restaurant] {
         var merged = existing
-        for restaurant in new {
-            let key = restaurant.name.lowercased()
-            let isDuplicate = merged.contains { existing in
-                existing.name.lowercased() == key &&
-                    abs(existing.coordinate.latitude - restaurant.coordinate.latitude) < 0.0005 &&
-                    abs(existing.coordinate.longitude - restaurant.coordinate.longitude) < 0.0005
-            }
-            if !isDuplicate {
-                merged.append(restaurant)
-            }
+        for restaurant in new where !merged.contains(where: { isSamePlace($0, as: restaurant) }) {
+            merged.append(restaurant)
         }
         return merged.sorted { $0.distance < $1.distance }
     }
 
+    // MARK: - Same-Place Helpers
+
+    /// Returns `true` when `lhs` and `rhs` represent the same physical restaurant:
+    /// same name (case-insensitive) and coordinates within
+    /// `RestaurantSearchService.coordinateProximityThreshold`.
+    private static func isSamePlace(_ lhs: Restaurant, as rhs: Restaurant) -> Bool {
+        lhs.name.lowercased() == rhs.name.lowercased()
+            && abs(lhs.coordinate.latitude - rhs.coordinate.latitude)
+            < RestaurantSearchService.coordinateProximityThreshold
+            && abs(lhs.coordinate.longitude - rhs.coordinate.longitude)
+            < RestaurantSearchService.coordinateProximityThreshold
+    }
+
+    /// Returns an updated copy of `existing` with `other`'s cuisine tags merged in
+    /// and a more-specific category substituted if available.
+    ///
+    /// Returns `nil` when no meaningful change would result (nothing to merge).
+    private static func merged(_ existing: Restaurant, with other: Restaurant) -> Restaurant? {
+        let mergedTags = existing.cuisineTags.union(other.cuisineTags)
+
+        let displayCategory: String? = if let newCat = other.category,
+                                          !RestaurantSearchService.genericCategories.contains(newCat),
+                                          RestaurantSearchService.genericCategories
+                                          .contains(existing.category ?? "") {
+            newCat
+        } else {
+            existing.category
+        }
+
+        guard mergedTags != existing.cuisineTags || displayCategory != existing.category else {
+            return nil
+        }
+
+        return Restaurant(
+            id: existing.id,
+            name: existing.name,
+            coordinate: existing.coordinate,
+            distance: existing.distance,
+            category: displayCategory,
+            cuisineTags: mergedTags,
+            phoneNumber: existing.phoneNumber ?? other.phoneNumber,
+            url: existing.url ?? other.url
+        )
+    }
+
     // MARK: - Private Methods
 
-    /// Subscribes to `locationManager.overrideLocation` changes and
+    /// Subscribes to `locationManager.overrideLocationPublisher` changes and
     /// triggers a restaurant re-fetch whenever the override is set or cleared.
     private func observeOverrideLocation() {
-        overrideCancellable = locationManager.$overrideLocation
+        overrideCancellable = locationManager.overrideLocationPublisher
             .dropFirst()
             .removeDuplicates { lhs, rhs in
                 guard let lhs, let rhs else { return lhs == nil && rhs == nil }

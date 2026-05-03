@@ -27,7 +27,7 @@ import MapKit
 ///     networkRadius: 10_000
 /// )
 /// ```
-actor RestaurantSearchService {
+actor RestaurantSearchService: RestaurantSearching {
     // MARK: - Errors
 
     /// Errors that can occur during restaurant search.
@@ -233,37 +233,17 @@ actor RestaurantSearchService {
     /// Radii at each depth: R → R/2 → R/4 → R/8.
     static let maxScatterDepth = 3
 
-    // MARK: - Internal Types
-
-    /// A pending scatter search node pairing a cuisine query with a
-    /// geographic sub-region to explore.
+    /// Maximum coordinate delta (in degrees latitude or longitude) used to
+    /// determine whether two results represent the same physical restaurant.
     ///
-    /// Produced by `executeScatterNode` when a child region is saturated.
-    /// Stored in `SearchJob.pendingScatterNodes` by the orchestrator.
-    struct ScatterNode {
-        let query: String
-        let label: String
-        let centre: CLLocationCoordinate2D
-        let radius: Double
-        let depth: Int
-    }
+    /// 0.0005° ≈ 55 m at the equator — tight enough to avoid merging nearby
+    /// branches of the same chain while still combining duplicate POI entries.
+    ///
+    /// Used in `deduplicate(_:)` and referenced by `RestaurantViewModel` for
+    /// the same purpose, ensuring a single source of truth for this threshold.
+    static let coordinateProximityThreshold: Double = 0.0005
 
-    /// Result of executing one focused-query batch via `executeFocusedBatch`.
-    struct FocusedBatchResult {
-        /// Restaurant/label pairs returned by the batch.
-        let results: [(Restaurant, String)]
-        /// Queries whose raw result count hit `mkLocalSearchResultCap`,
-        /// indicating the area is saturated and scatter should be enqueued.
-        let saturatedQueries: [(query: String, label: String)]
-    }
-
-    /// Result of executing one scatter node via `executeScatterNode`.
-    struct ScatterNodeResult {
-        /// Restaurant/label pairs returned by the cardinal + diagonal searches.
-        let results: [(Restaurant, String)]
-        /// Child nodes for saturated sub-regions that require further scatter.
-        let childNodes: [ScatterNode]
-    }
+    // MARK: - Internal Types (now top-level — see RestaurantSearchTypes.swift)
 
     // MARK: - Private Types
 
@@ -374,9 +354,7 @@ actor RestaurantSearchService {
                     }
                 }
                 var collected: [(String, String, SearchResult)] = []
-                for await item in group {
-                    collected.append(item)
-                }
+                for await item in group { collected.append(item) }
                 return collected
             }
 
@@ -488,9 +466,7 @@ actor RestaurantSearchService {
                     }
                 }
                 var collected: [(Cardinal, SearchResult)] = []
-                for await item in group {
-                    collected.append(item)
-                }
+                for await item in group { collected.append(item) }
                 return collected
             }
 
@@ -538,9 +514,7 @@ actor RestaurantSearchService {
                         }
                     }
                     var collected: [SearchResult] = []
-                    for await r in group {
-                        collected.append(r)
-                    }
+                    for await r in group { collected.append(r) }
                     return collected
                 }
 
@@ -604,9 +578,7 @@ actor RestaurantSearchService {
                 }
             }
             var results: [(Restaurant, String)] = []
-            for await r in group {
-                results.append(contentsOf: r.results)
-            }
+            for await r in group { results.append(contentsOf: r.results) }
             return results
         }
     }
@@ -696,8 +668,10 @@ actor RestaurantSearchService {
 
             if let idx = unique.firstIndex(where: { existing in
                 existing.name.lowercased() == key
-                    && abs(existing.coordinate.latitude - restaurant.coordinate.latitude) < 0.0005
-                    && abs(existing.coordinate.longitude - restaurant.coordinate.longitude) < 0.0005
+                    && abs(existing.coordinate.latitude - restaurant.coordinate.latitude)
+                    < Self.coordinateProximityThreshold
+                    && abs(existing.coordinate.longitude - restaurant.coordinate.longitude)
+                    < Self.coordinateProximityThreshold
             }) {
                 let existing = unique[idx]
                 var mergedTags = existing.cuisineTags
