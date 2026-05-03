@@ -105,7 +105,9 @@ struct SearchJob {
             .map { Array(queries[$0 ..< min($0 + batchSize, queries.count)]) }
     }()
 
-    var totalFocusedBatches: Int { Self.allBatches.count }
+    var totalFocusedBatches: Int {
+        Self.allBatches.count
+    }
 
     /// `true` once all focused batches, the POI search, and all scatter nodes
     /// have been executed for this job.
@@ -169,7 +171,7 @@ actor SearchOrchestrator {
     // MARK: - Constants
 
     /// Network search radius used for all jobs (10 km).
-    static let networkRadius: Double = 10_000
+    static let networkRadius: Double = 10000
 
     /// Two locations within this distance (metres) are treated as identical.
     static let sameLocationThreshold: Double = 50.0
@@ -312,40 +314,40 @@ actor SearchOrchestrator {
     // MARK: - Test Helpers
 
     #if DEBUG
-    /// Sets `poiSearchDone` on the job with the given ID.
-    ///
-    /// Intended for use in unit tests only — not called by production code.
-    func setJobPoiSearchDone(_ done: Bool, forJobID id: UUID) {
-        guard let idx = jobs.firstIndex(where: { $0.id == id }) else { return }
-        jobs[idx].poiSearchDone = done
-    }
+        /// Sets `poiSearchDone` on the job with the given ID.
+        ///
+        /// Intended for use in unit tests only — not called by production code.
+        func setJobPoiSearchDone(_ done: Bool, forJobID id: UUID) {
+            guard let idx = jobs.firstIndex(where: { $0.id == id }) else { return }
+            jobs[idx].poiSearchDone = done
+        }
 
-    /// Sets `nextFocusedBatchIndex` on the job with the given ID.
-    ///
-    /// Intended for use in unit tests only — not called by production code.
-    func setJobNextFocusedBatchIndex(_ index: Int, forJobID id: UUID) {
-        guard let idx = jobs.firstIndex(where: { $0.id == id }) else { return }
-        jobs[idx].nextFocusedBatchIndex = index
-    }
+        /// Sets `nextFocusedBatchIndex` on the job with the given ID.
+        ///
+        /// Intended for use in unit tests only — not called by production code.
+        func setJobNextFocusedBatchIndex(_ index: Int, forJobID id: UUID) {
+            guard let idx = jobs.firstIndex(where: { $0.id == id }) else { return }
+            jobs[idx].nextFocusedBatchIndex = index
+        }
 
-    /// Sets `pendingScatterNodes` on the job with the given ID.
-    ///
-    /// Intended for use in unit tests only — not called by production code.
-    func setJobPendingScatterNodes(
-        _ nodes: [ScatterNode],
-        forJobID id: UUID
-    ) {
-        guard let idx = jobs.firstIndex(where: { $0.id == id }) else { return }
-        jobs[idx].pendingScatterNodes = nodes
-    }
+        /// Sets `pendingScatterNodes` on the job with the given ID.
+        ///
+        /// Intended for use in unit tests only — not called by production code.
+        func setJobPendingScatterNodes(
+            _ nodes: [ScatterNode],
+            forJobID id: UUID
+        ) {
+            guard let idx = jobs.firstIndex(where: { $0.id == id }) else { return }
+            jobs[idx].pendingScatterNodes = nodes
+        }
 
-    /// Sets `widePassBatchIndex` on the job with the given ID.
-    ///
-    /// Intended for use in unit tests only — not called by production code.
-    func setJobWidePassBatchIndex(_ index: Int?, forJobID id: UUID) {
-        guard let idx = jobs.firstIndex(where: { $0.id == id }) else { return }
-        jobs[idx].widePassBatchIndex = index
-    }
+        /// Sets `widePassBatchIndex` on the job with the given ID.
+        ///
+        /// Intended for use in unit tests only — not called by production code.
+        func setJobWidePassBatchIndex(_ index: Int?, forJobID id: UUID) {
+            guard let idx = jobs.firstIndex(where: { $0.id == id }) else { return }
+            jobs[idx].widePassBatchIndex = index
+        }
     #endif
 
     // MARK: - Run Loop

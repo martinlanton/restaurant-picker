@@ -1,5 +1,5 @@
-import SwiftUI
 @testable import RestaurantPicker
+import SwiftUI
 import XCTest
 
 /// Unit tests for `StarRatingView` logic helpers.

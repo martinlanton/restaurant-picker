@@ -183,6 +183,7 @@ struct ContentView: View {
         }
     }
 
+    /// A spinner view shown while the initial restaurant search is running.
     private var loadingView: some View {
         VStack(spacing: 16) {
             Spacer()
@@ -194,6 +195,9 @@ struct ContentView: View {
         }
     }
 
+    /// A full-screen error view with a "Try Again" button.
+    ///
+    /// - Parameter message: The human-readable error description to display.
     private func errorView(message: String) -> some View {
         VStack(spacing: 16) {
             Spacer()
@@ -212,6 +216,7 @@ struct ContentView: View {
         }
     }
 
+    /// A placeholder view shown when the filtered restaurant list is empty.
     private var emptyView: some View {
         VStack(spacing: 16) {
             Spacer()
@@ -226,6 +231,7 @@ struct ContentView: View {
         }
     }
 
+    /// The scrollable restaurant list backed by `viewModel.filteredRestaurants`.
     private var restaurantList: some View {
         RestaurantListView(
             restaurants: viewModel.filteredRestaurants,

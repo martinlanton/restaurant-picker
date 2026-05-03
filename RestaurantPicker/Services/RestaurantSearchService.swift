@@ -370,7 +370,9 @@ actor RestaurantSearchService: RestaurantSearching {
                     }
                 }
                 var collected: [(String, String, SearchResult)] = []
-                for await item in group { collected.append(item) }
+                for await item in group {
+                    collected.append(item)
+                }
                 return collected
             }
 
@@ -541,7 +543,9 @@ actor RestaurantSearchService: RestaurantSearching {
                 }
             }
             var collected: [(Cardinal, SearchResult)] = []
-            for await item in group { collected.append(item) }
+            for await item in group {
+                collected.append(item)
+            }
             return collected
         }
     }
@@ -587,7 +591,9 @@ actor RestaurantSearchService: RestaurantSearching {
                 }
             }
             var collected: [SearchResult] = []
-            for await r in group { collected.append(r) }
+            for await r in group {
+                collected.append(r)
+            }
             return collected
         }
     }
@@ -623,7 +629,9 @@ actor RestaurantSearchService: RestaurantSearching {
                 }
             }
             var results: [(Restaurant, String)] = []
-            for await r in group { results.append(contentsOf: r.results) }
+            for await r in group {
+                results.append(contentsOf: r.results)
+            }
             return results
         }
     }

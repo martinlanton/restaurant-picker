@@ -145,6 +145,10 @@ struct CuisineFilterView: View {
 
     // MARK: - Region Chip
 
+    /// Renders a single top-level cuisine region as a tappable chip.
+    ///
+    /// Leaf regions toggle their single cuisine directly; non-leaf regions
+    /// expand/collapse an inline sub-cuisine panel.
     private func regionChip(_ region: CuisineRegion) -> some View {
         let isOpen = openRegion == region.name
         let isLeaf = region.isLeaf
@@ -191,6 +195,14 @@ struct CuisineFilterView: View {
 
     // MARK: - Sub-cuisine Panel
 
+    /// Renders the expanded sub-cuisine panel for a non-leaf region.
+    ///
+    /// Includes a "Select all / Deselect all" header and individual chips
+    /// for each leaf cuisine belonging to the region.
+    /// Renders the expanded sub-cuisine panel for a non-leaf region.
+    ///
+    /// Includes a "Select all / Deselect all" header and individual chips
+    /// for each leaf cuisine belonging to the region.
     private func subCuisinePanel(for region: CuisineRegion) -> some View {
         let leaves = leafCuisines(for: region)
         let activeSet = activeSetForMode()
@@ -241,20 +253,30 @@ struct CuisineFilterView: View {
 
     // MARK: - Chip Styling
 
+    /// Background fill for a chip based on its active/open state.
     private func chipBg(isActive: Bool, someActive: Bool, isOpen: Bool, color: Color) -> Color {
         if isActive { return color }
         if someActive || isOpen { return color.opacity(0.12) }
         return Color.secondary.opacity(0.15)
     }
 
+    /// Foreground (text/icon) colour for a chip based on its active/open state.
     private func chipFg(isActive: Bool, someActive: Bool, isOpen: Bool, color: Color) -> Color {
         isActive ? .white : (someActive || isOpen ? color : .primary)
     }
 
+    /// Stroke border colour for a chip based on its active/open state.
     private func chipBorder(isActive: Bool, someActive: Bool, isOpen: Bool, color: Color) -> Color {
         (isActive || (!someActive && !isOpen)) ? .clear : color.opacity(0.5)
     }
 
+    /// Creates a styled pill button used for both cuisine chips and rating chips.
+    ///
+    /// - Parameters:
+    ///   - label: Display text for the chip.
+    ///   - isActive: Whether the chip is currently selected.
+    ///   - activeColor: Accent colour used when selected.
+    ///   - action: Closure to invoke when the chip is tapped.
     private func chipButton(
         label: String,
         isActive: Bool,
@@ -276,8 +298,15 @@ struct CuisineFilterView: View {
 
     // MARK: - Tri-state
 
+    /// Describes how many leaves in a region are currently active.
     private enum TriState { case none, some, all }
 
+    /// Returns the tri-state for a group of leaf cuisines against the active set.
+    ///
+    /// - Parameters:
+    ///   - leaves: All leaf cuisine labels for the region.
+    ///   - activeSet: The currently selected (or excluded) set.
+    /// - Returns: `.none`, `.some`, or `.all` depending on how many are active.
     private func triState(leaves: [String], activeSet: Set<String>) -> TriState {
         let n = leaves.filter { activeSet.contains($0) }.count
         return n == 0 ? .none : n == leaves.count ? .all : .some
@@ -285,10 +314,14 @@ struct CuisineFilterView: View {
 
     // MARK: - Helpers
 
+    /// Returns the flat list of leaf cuisines for a region, handling the
+    /// continent vs country distinction.
     private func leafCuisines(for region: CuisineRegion) -> [String] {
         region.isContinent ? continentLeaves(region) : region.allCuisines
     }
 
+    /// Builds the ordered leaf-cuisine list for a continent region, placing
+    /// each country's name first followed by its sub-cuisines.
     private func continentLeaves(_ region: CuisineRegion) -> [String] {
         var out: [String] = []
         for group in region.groups {
@@ -300,19 +333,30 @@ struct CuisineFilterView: View {
         return out
     }
 
+    /// Returns the currently active cuisine set for the selected filter mode.
     private func activeSetForMode() -> Set<String> {
         filterMode == .include ? selectedCuisines : excludedCuisines
     }
 
+    /// Returns the accent colour for the current filter mode.
+    ///
+    /// Include mode uses the app accent colour; exclude mode uses red.
     private func activeColor() -> Color {
         filterMode == .include ? .accentColor : .red
     }
 
+    /// Strips the leading flag emoji from a region name, returning the plain label.
+    ///
+    /// For example `"🇯🇵 Japanese"` → `"Japanese"`, `"Japanese"` → `"Japanese"`.
     private func bareLabel(_ name: String) -> String {
         let p = name.components(separatedBy: " ")
         return p.count > 1 ? p.dropFirst().joined(separator: " ") : name
     }
 
+    /// Toggles a single cuisine between selected, excluded, and unset,
+    /// respecting the current filter mode.
+    /// Toggles a single cuisine between selected, excluded, and unset,
+    /// respecting the current filter mode.
     private func toggle(cuisine: String) {
         if filterMode == .include {
             if selectedCuisines.contains(cuisine) { selectedCuisines.remove(cuisine) }
@@ -323,6 +367,10 @@ struct CuisineFilterView: View {
         }
     }
 
+    /// Toggles all leaf cuisines for a region on or off.
+    ///
+    /// When the current state is `.all` every leaf is deselected; otherwise every
+    /// leaf is added to the active set (and removed from the opposing set).
     private func toggleAll(leaves: [String], state: TriState) {
         for leaf in leaves {
             if state == .all {
@@ -446,6 +494,8 @@ private struct RowInjectingLayout: Layout {
 
 // MARK: - FlowLayout
 
+/// A simple wrapping flow layout that places children left-to-right,
+/// wrapping to the next line when a child would exceed the available width.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 

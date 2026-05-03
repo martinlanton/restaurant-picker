@@ -112,7 +112,6 @@ struct SelectedRestaurantView: View {
     }
 }
 
-
 // MARK: - Preview
 
 #Preview {
