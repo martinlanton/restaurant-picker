@@ -107,7 +107,7 @@ final class LocationOverrideTests: XCTestCase {
     private let newYork = CLLocation(latitude: 40.7128, longitude: -74.0060)
     private let london = CLLocation(latitude: 51.5074, longitude: -0.1278)
     private let parisTiny = CLLocation(latitude: 48.8566, longitude: 2.3522)
-    /// A second Paris location only ~0.05 m away — should NOT trigger a new search.
+    // A second Paris location only ~0.05 m away — should NOT trigger a new search.
     private let parisTinyJitter = CLLocation(latitude: 48.85660045, longitude: 2.3522)
 
     func testSettingOverrideLocationTriggersNewSearch() async {
@@ -202,21 +202,42 @@ final class SelectRandomRestaurantEdgeCaseTests: XCTestCase {
         )
     }
 
-    func testSelectRandomRestaurantSetsErrorWhenFilteredListIsEmpty() {
-        // Arrange — one restaurant at 5 km; distance filter set to 1 km.
-        let vm = RestaurantViewModel(
+    func testSelectRandomRestaurantFailsWhenPickEligibleListIsEmpty() {
+        // Covers all filter types that can eliminate restaurants from the pick pool:
+        // distance, cuisine include, cuisine exclude, and minimum rating.
+        // In each sub-case selectRandomRestaurant() must set an error and leave
+        // showSelectedRestaurant false — the sheet must never open on an empty pool.
+
+        // Sub-case A: distance filter eliminates the only restaurant.
+        let vmA = RestaurantViewModel(
             restaurants: [makeSample(name: "Far Ramen", cuisine: "Japanese", distance: 5000)]
         )
-        vm.filterRadius = 1000 // filters out the only restaurant
-        XCTAssertTrue(vm.filteredRestaurants.isEmpty, "Pre-condition: filtered list must be empty")
+        vmA.filterRadius = 1000
+        XCTAssertTrue(vmA.pickEligibleRestaurants.isEmpty, "Pre-condition A: distance filter must eliminate all")
+        vmA.selectRandomRestaurant()
+        XCTAssertNotNil(vmA.errorMessage, "A: error must be set when pick pool is empty")
+        XCTAssertFalse(vmA.showSelectedRestaurant, "A: sheet must not open")
+        XCTAssertNil(vmA.selectedRestaurant, "A: no restaurant must be selected")
 
-        // Act
-        vm.selectRandomRestaurant()
+        // Sub-case B: cuisine include filter eliminates the only restaurant.
+        let vmB = RestaurantViewModel(
+            restaurants: [makeSample(name: "Pizza Shop", cuisine: "Italian")]
+        )
+        vmB.selectedCuisines = ["Japanese"]
+        XCTAssertTrue(vmB.pickEligibleRestaurants.isEmpty, "Pre-condition B: include filter must eliminate all")
+        vmB.selectRandomRestaurant()
+        XCTAssertNotNil(vmB.errorMessage, "B: error must be set when pick pool is empty")
+        XCTAssertFalse(vmB.showSelectedRestaurant, "B: sheet must not open")
 
-        // Assert
-        XCTAssertNotNil(vm.errorMessage, "An error message must be set when no restaurants are available")
-        XCTAssertFalse(vm.showSelectedRestaurant, "Sheet must not be shown when selection fails")
-        XCTAssertNil(vm.selectedRestaurant, "No restaurant should be selected")
+        // Sub-case C: cuisine exclude filter eliminates the only restaurant.
+        let vmC = RestaurantViewModel(
+            restaurants: [makeSample(name: "Sushi Bar", cuisine: "Japanese")]
+        )
+        vmC.excludedCuisines = ["Japanese"]
+        XCTAssertTrue(vmC.pickEligibleRestaurants.isEmpty, "Pre-condition C: exclude filter must eliminate all")
+        vmC.selectRandomRestaurant()
+        XCTAssertNotNil(vmC.errorMessage, "C: error must be set when pick pool is empty")
+        XCTAssertFalse(vmC.showSelectedRestaurant, "C: sheet must not open")
     }
 
     func testSelectRandomRestaurantSetsShowSelectedRestaurantOnSuccess() {
@@ -233,22 +254,6 @@ final class SelectRandomRestaurantEdgeCaseTests: XCTestCase {
         XCTAssertTrue(vm.showSelectedRestaurant, "Sheet must be shown after a successful pick")
         XCTAssertNotNil(vm.selectedRestaurant)
         XCTAssertNil(vm.errorMessage)
-    }
-
-    func testSelectRandomRestaurantAfterCuisineFilterEliminatesAll() {
-        // Arrange
-        let vm = RestaurantViewModel(
-            restaurants: [makeSample(name: "Pizza Shop", cuisine: "Italian")]
-        )
-        vm.selectedCuisines = ["Japanese"] // filters out the only restaurant
-        XCTAssertTrue(vm.filteredRestaurants.isEmpty, "Pre-condition: cuisine filter must eliminate all restaurants")
-
-        // Act
-        vm.selectRandomRestaurant()
-
-        // Assert
-        XCTAssertNotNil(vm.errorMessage)
-        XCTAssertFalse(vm.showSelectedRestaurant)
     }
 
     func testShowSelectedRestaurantRemainsAfterFilterChange() {
@@ -465,17 +470,17 @@ final class ActiveFilterCountExhaustiveTests: XCTestCase {
     func testAllFilterTypesActiveProduceCorrectSum() {
         let vm = makeVM()
         vm.selectedCuisines = ["Japanese", "Thai"] // +2
-        vm.excludedCuisines = ["FastFood"] // +1
-        vm.minimumRating = 3 // +1
+        vm.excludedCuisines = ["FastFood"]         // +1
+        vm.minimumRating = 3                       // +1
 
         XCTAssertEqual(vm.activeCuisineFilterCount, 4)
     }
 
     func testAllFilterTypesActiveWithMultipleExcludes() {
         let vm = makeVM()
-        vm.selectedCuisines = ["Japanese"] // +1
-        vm.excludedCuisines = ["FastFood", "Pizza"] // +2
-        vm.minimumRating = 4 // +1
+        vm.selectedCuisines = ["Japanese"]           // +1
+        vm.excludedCuisines = ["FastFood", "Pizza"]  // +2
+        vm.minimumRating = 4                         // +1
 
         XCTAssertEqual(vm.activeCuisineFilterCount, 4)
     }
@@ -541,5 +546,222 @@ final class ActiveFilterCountExhaustiveTests: XCTestCase {
         vm.minimumRating = nil
 
         XCTAssertEqual(vm.activeCuisineFilterCount, 0)
+    }
+}
+
+// MARK: - Search Text Display-Only Tests
+
+/// Tests that `searchText` only affects what is *displayed* in `filteredRestaurants`
+/// and never gates the "Pick a Restaurant!" action: `pickEligibleRestaurants` and
+/// `selectRandomRestaurant()` must be unaffected by search text.
+@MainActor
+final class SearchTextDisplayOnlyTests: XCTestCase {
+    private func makeSample(name: String, cuisine: String = "Test") -> Restaurant {
+        Restaurant(
+            id: UUID(),
+            name: name,
+            coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+            distance: 300,
+            category: cuisine,
+            cuisineTags: [cuisine],
+            phoneNumber: nil,
+            url: nil
+        )
+    }
+
+    func testSearchTextFiltersDisplayListButNotPickPool() {
+        // Arrange — two restaurants; search matches only one.
+        let vm = RestaurantViewModel(
+            restaurants: [
+                makeSample(name: "Thai Palace", cuisine: "Thai"),
+                makeSample(name: "Ramen House", cuisine: "Japanese"),
+            ]
+        )
+        vm.filterRadius = nil
+
+        // Act — type a query that only matches "Ramen House".
+        vm.searchText = "ramen"
+
+        // Assert: display list is narrowed to 1…
+        XCTAssertEqual(vm.filteredRestaurants.count, 1, "Display list must respect search text")
+        XCTAssertEqual(vm.filteredRestaurants.first?.name, "Ramen House")
+
+        // …but pick pool still contains both restaurants.
+        XCTAssertEqual(
+            vm.pickEligibleRestaurants.count, 2,
+            "Search text must not reduce the pick-eligible pool"
+        )
+    }
+
+    func testSelectRandomRestaurantIgnoresSearchText() {
+        // One restaurant is visible in the pick pool even when search text hides it
+        // from the display list; selectRandomRestaurant() must still succeed.
+        let vm = RestaurantViewModel(
+            restaurants: [makeSample(name: "Sushi Corner", cuisine: "Japanese")]
+        )
+        vm.filterRadius = nil
+        vm.searchText = "pizza" // hides the only restaurant from filteredRestaurants
+
+        XCTAssertTrue(vm.filteredRestaurants.isEmpty, "Pre-condition: search hides restaurant from display")
+        XCTAssertFalse(vm.pickEligibleRestaurants.isEmpty, "Pre-condition: pick pool must still contain restaurant")
+
+        vm.selectRandomRestaurant()
+
+        XCTAssertNotNil(vm.selectedRestaurant, "Must pick the restaurant even though search text hides it")
+        XCTAssertTrue(vm.showSelectedRestaurant, "Sheet must be shown")
+        XCTAssertNil(vm.errorMessage)
+    }
+}
+
+// MARK: - Pick Button Eligibility Tests
+
+/// Tests that `pickEligibleRestaurants` correctly reflects which restaurants
+/// are available to the "Pick a Restaurant!" button after applying
+/// distance, cuisine, and rating filters (but ignoring search text).
+@MainActor
+final class PickButtonEligibilityTests: XCTestCase {
+    private func makeSample(name: String, cuisine: String, distance: Double = 300) -> Restaurant {
+        Restaurant(
+            id: UUID(),
+            name: name,
+            coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+            distance: distance,
+            category: cuisine,
+            cuisineTags: [cuisine],
+            phoneNumber: nil,
+            url: nil
+        )
+    }
+
+    func testPickPoolIsEmptyWhenDistanceFilterEliminatesAll() {
+        let vm = RestaurantViewModel(
+            restaurants: [makeSample(name: "Far Thai", cuisine: "Thai", distance: 5000)]
+        )
+        vm.filterRadius = 1000
+        XCTAssertTrue(vm.pickEligibleRestaurants.isEmpty, "Distance filter must empty the pick pool")
+    }
+
+    func testPickPoolIsEmptyWhenCuisineIncludeEliminatesAll() {
+        let vm = RestaurantViewModel(
+            restaurants: [makeSample(name: "Pizza Place", cuisine: "Italian")]
+        )
+        vm.selectedCuisines = ["Japanese"]
+        XCTAssertTrue(vm.pickEligibleRestaurants.isEmpty, "Include filter must empty the pick pool")
+    }
+
+    func testPickPoolIsEmptyWhenCuisineExcludeEliminatesAll() {
+        let vm = RestaurantViewModel(
+            restaurants: [makeSample(name: "Sushi Bar", cuisine: "Japanese")]
+        )
+        vm.excludedCuisines = ["Japanese"]
+        XCTAssertTrue(vm.pickEligibleRestaurants.isEmpty, "Exclude filter must empty the pick pool")
+    }
+
+    func testPickPoolRemainsNonEmptyWhenOnlySearchTextFiltersAll() {
+        // Even when search text hides every restaurant from the display list,
+        // the pick pool must remain non-empty so the button stays enabled.
+        let vm = RestaurantViewModel(
+            restaurants: [makeSample(name: "Thai Corner", cuisine: "Thai")]
+        )
+        vm.filterRadius = nil
+        vm.searchText = "zzznomatch"
+
+        XCTAssertTrue(vm.filteredRestaurants.isEmpty, "Pre-condition: search must hide all from display")
+        XCTAssertFalse(
+            vm.pickEligibleRestaurants.isEmpty,
+            "Pick pool must remain non-empty when only search text filters restaurants out"
+        )
+    }
+}
+
+// MARK: - Cuisine Mutual Exclusivity Tests
+
+/// Tests that when a cuisine is in both `selectedCuisines` and `excludedCuisines`
+/// the exclude filter takes priority, keeping the restaurant out of the pick pool.
+///
+/// The UI (`CuisineFilterView.toggle()`) prevents this state from occurring
+/// in normal use, but the ViewModel must behave predictably if it arises.
+@MainActor
+final class CuisineMutualExclusivityTests: XCTestCase {
+    private func makeSample(name: String, cuisine: String) -> Restaurant {
+        Restaurant(
+            id: UUID(),
+            name: name,
+            coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+            distance: 300,
+            category: cuisine,
+            cuisineTags: [cuisine],
+            phoneNumber: nil,
+            url: nil
+        )
+    }
+
+    func testExcludeWinsWhenCuisineIsInBothSets() {
+        // If a cuisine ends up in both sets (e.g. via programmatic mutation),
+        // the exclude filter must take priority and the restaurant must be hidden.
+        let vm = RestaurantViewModel(
+            restaurants: [makeSample(name: "Ramen Bar", cuisine: "Japanese")]
+        )
+        vm.selectedCuisines = ["Japanese"]
+        vm.excludedCuisines = ["Japanese"]
+
+        XCTAssertTrue(
+            vm.pickEligibleRestaurants.isEmpty,
+            "Exclude must take priority over include when a cuisine is in both sets"
+        )
+        XCTAssertTrue(
+            vm.filteredRestaurants.isEmpty,
+            "Display list must also be empty when exclude wins"
+        )
+    }
+}
+
+// MARK: - Clear Selection (Pick Again) Tests
+
+/// Tests that `clearSelection()` — called by the "Pick Again" and "Done"
+/// buttons in `SelectedRestaurantView` — fully resets the selection state.
+@MainActor
+final class ClearSelectionTests: XCTestCase {
+    private func makeSample(name: String) -> Restaurant {
+        Restaurant(
+            id: UUID(),
+            name: name,
+            coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+            distance: 300,
+            category: "Test",
+            cuisineTags: ["Test"],
+            phoneNumber: nil,
+            url: nil
+        )
+    }
+
+    func testClearSelectionResetsShowSelectedRestaurantAndSelectedRestaurant() {
+        // Arrange — pick a restaurant so the sheet is shown.
+        let vm = RestaurantViewModel(
+            restaurants: [makeSample(name: "Thai Palace")]
+        )
+        vm.filterRadius = nil
+        vm.selectRandomRestaurant()
+        XCTAssertTrue(vm.showSelectedRestaurant, "Pre-condition: sheet must be visible")
+        XCTAssertNotNil(vm.selectedRestaurant, "Pre-condition: a restaurant must be selected")
+
+        // Act — simulate "Pick Again" / "Done"
+        vm.clearSelection()
+
+        // Assert
+        XCTAssertFalse(vm.showSelectedRestaurant, "clearSelection must hide the sheet")
+        XCTAssertNil(vm.selectedRestaurant, "clearSelection must clear the selected restaurant")
+    }
+
+    func testClearSelectionIsIdempotent() {
+        // Calling clearSelection() when nothing is selected must not crash or change state.
+        let vm = RestaurantViewModel(restaurants: [])
+        XCTAssertFalse(vm.showSelectedRestaurant)
+        XCTAssertNil(vm.selectedRestaurant)
+
+        vm.clearSelection()
+
+        XCTAssertFalse(vm.showSelectedRestaurant)
+        XCTAssertNil(vm.selectedRestaurant)
     }
 }

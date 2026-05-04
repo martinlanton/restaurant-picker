@@ -29,6 +29,11 @@ final class RestaurantViewModel: ObservableObject {
     /// Restaurants filtered by the current radius.
     @Published private(set) var filteredRestaurants: [Restaurant] = []
 
+    /// Restaurants eligible to be picked: filtered by distance, cuisine, and rating
+    /// but **not** by search text. Search text is display-only and must not gate
+    /// the "Pick a Restaurant!" action.
+    @Published private(set) var pickEligibleRestaurants: [Restaurant] = []
+
     /// The currently selected restaurant (from random selection).
     @Published var selectedRestaurant: Restaurant?
 
@@ -166,7 +171,7 @@ final class RestaurantViewModel: ObservableObject {
         self.locationManager = locationManager ?? LocationManager()
         self.searchService = service
         self.ratingStore = ratingStore ?? RatingStore()
-        orchestrator = SearchOrchestrator(searchService: service)
+        self.orchestrator = SearchOrchestrator(searchService: service)
         observeOverrideLocation()
         startOrchestratorLoop()
         observeSearchText()
@@ -179,7 +184,7 @@ final class RestaurantViewModel: ObservableObject {
     ///   - ratingStore: Store for user ratings. Defaults to a new instance.
     @MainActor
     init(restaurants: [Restaurant], ratingStore: RatingStore? = nil) {
-        searchDebounceInterval = .zero
+        self.searchDebounceInterval = .zero
         let service = RestaurantSearchService()
         locationManager = LocationManager()
         searchService = service
@@ -187,6 +192,7 @@ final class RestaurantViewModel: ObservableObject {
         orchestrator = SearchOrchestrator(searchService: service)
         self.restaurants = restaurants
         filteredRestaurants = restaurants
+        pickEligibleRestaurants = restaurants
     }
 
     // MARK: - Public Methods
@@ -269,15 +275,15 @@ final class RestaurantViewModel: ObservableObject {
     /// 1★=0.25, 2★=0.5, 3★=1.0, 4★=2.0, 5★=4.0, unrated=1.0.
     /// When a rating filter is active, selection is uniform.
     func selectRandomRestaurant() {
-        guard !filteredRestaurants.isEmpty else {
+        guard !pickEligibleRestaurants.isEmpty else {
             errorMessage = "No restaurants available to choose from."
             return
         }
 
         if minimumRating == nil {
-            selectedRestaurant = weightedRandomElement(from: filteredRestaurants)
+            selectedRestaurant = weightedRandomElement(from: pickEligibleRestaurants)
         } else {
-            selectedRestaurant = filteredRestaurants.randomElement()
+            selectedRestaurant = pickEligibleRestaurants.randomElement()
         }
         showSelectedRestaurant = true
     }
@@ -308,9 +314,9 @@ final class RestaurantViewModel: ObservableObject {
     private func startOrchestratorLoop() {
         orchestratorTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            await orchestrator.start()
-            for await update in orchestrator.updates {
-                handleOrchestratorUpdate(update)
+            await self.orchestrator.start()
+            for await update in self.orchestrator.updates {
+                self.handleOrchestratorUpdate(update)
             }
         }
     }
@@ -585,12 +591,14 @@ final class RestaurantViewModel: ObservableObject {
     /// Applies the distance, cuisine, rating, and text filters to the restaurants list.
     private func applyFilter() {
         let searchQuery = normalizedSearchQuery()
-        filteredRestaurants = restaurants.filter { restaurant in
+        pickEligibleRestaurants = restaurants.filter { restaurant in
             passesDistanceFilter(restaurant)
                 && passesCuisineIncludeFilter(restaurant)
                 && passesCuisineExcludeFilter(restaurant)
                 && passesRatingFilter(restaurant)
-                && passesSearchFilter(restaurant, query: searchQuery)
+        }
+        filteredRestaurants = pickEligibleRestaurants.filter { restaurant in
+            passesSearchFilter(restaurant, query: searchQuery)
         }
     }
 
@@ -667,9 +675,7 @@ extension RestaurantViewModel {
         .sorted()
 
     /// Unique, sorted list of cuisine categories available for filtering.
-    var availableCuisines: [String] {
-        Self.allCuisines
-    }
+    var availableCuisines: [String] { Self.allCuisines }
 
     /// Total number of active filters (cuisine includes + excludes + rating).
     var activeCuisineFilterCount: Int {

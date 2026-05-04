@@ -55,7 +55,7 @@ struct ContentView: View {
                     HStack {
                         Text(
                             "\(viewModel.filteredRestaurants.count) " +
-                                "restaurant\(viewModel.filteredRestaurants.count == 1 ? "" : "s")"
+                            "restaurant\(viewModel.filteredRestaurants.count == 1 ? "" : "s")"
                         )
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -86,7 +86,7 @@ struct ContentView: View {
                     viewModel.selectRandomRestaurant()
                 }
                 .padding()
-                .disabled(viewModel.filteredRestaurants.isEmpty)
+                .disabled(viewModel.pickEligibleRestaurants.isEmpty)
             }
             .navigationTitle("Restaurant Picker")
             .toolbar {
