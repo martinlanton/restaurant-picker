@@ -166,7 +166,7 @@ final class RestaurantViewModel: ObservableObject {
         self.locationManager = locationManager ?? LocationManager()
         self.searchService = service
         self.ratingStore = ratingStore ?? RatingStore()
-        orchestrator = SearchOrchestrator(searchService: service)
+        self.orchestrator = SearchOrchestrator(searchService: service)
         observeOverrideLocation()
         startOrchestratorLoop()
         observeSearchText()
@@ -179,7 +179,7 @@ final class RestaurantViewModel: ObservableObject {
     ///   - ratingStore: Store for user ratings. Defaults to a new instance.
     @MainActor
     init(restaurants: [Restaurant], ratingStore: RatingStore? = nil) {
-        searchDebounceInterval = .zero
+        self.searchDebounceInterval = .zero
         let service = RestaurantSearchService()
         locationManager = LocationManager()
         searchService = service
@@ -308,9 +308,9 @@ final class RestaurantViewModel: ObservableObject {
     private func startOrchestratorLoop() {
         orchestratorTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            await orchestrator.start()
-            for await update in orchestrator.updates {
-                handleOrchestratorUpdate(update)
+            await self.orchestrator.start()
+            for await update in self.orchestrator.updates {
+                self.handleOrchestratorUpdate(update)
             }
         }
     }
@@ -366,10 +366,7 @@ final class RestaurantViewModel: ObservableObject {
         let currentFocusRadius = filterRadius ?? 500
         let prefetchRadii: [Double] = [500, 1000, 2000, 5000]
             .filter { $0 > currentFocusRadius }
-            .filter { radius in
-                findCacheEntry(for: location, radius: Self.networkSearchRadius) == nil ||
-                    !hasCoverageForFocusRadius(radius, at: location)
-            }
+            .filter { radius in !hasCoverageForFocusRadius(radius, at: location) }
 
         guard !prefetchRadii.isEmpty else { return }
 
@@ -670,9 +667,7 @@ extension RestaurantViewModel {
         .sorted()
 
     /// Unique, sorted list of cuisine categories available for filtering.
-    var availableCuisines: [String] {
-        Self.allCuisines
-    }
+    var availableCuisines: [String] { Self.allCuisines }
 
     /// Total number of active filters (cuisine includes + excludes + rating).
     var activeCuisineFilterCount: Int {
