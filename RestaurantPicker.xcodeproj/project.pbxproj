@@ -36,6 +36,10 @@
         FF01AA02BB03CC04DD05EE06 /* SearchOrchestratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF01AA02BB03CC04DD05EE07 /* SearchOrchestratorTests.swift */; };
         A102B203C304D405E506F607 /* StarRatingViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A102B203C304D405E506F608 /* StarRatingViewTests.swift */; };
         B203C304D405E506F607A708 /* RestaurantSearchServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B203C304D405E506F607A709 /* RestaurantSearchServiceTests.swift */; };
+        C304D405E506F607A708B209 /* MockRestaurantSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C304D405E506F607A708B20A /* MockRestaurantSearchService.swift */; };
+        E506F607A708B209C304D40D /* MockLocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E506F607A708B209C304D40E /* MockLocationManager.swift */; };
+        F607A708B209C304D405E50F /* RestaurantViewModelFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F607A708B209C304D405E510 /* RestaurantViewModelFeatureTests.swift */; };
+        D405E506F607A708B209C30B /* LocationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D405E506F607A708B209C30C /* LocationManagerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,7 +92,11 @@
         DD01EE02FF03AA04BB05CC07 /* LocationManaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManaging.swift; sourceTree = "<group>"; };
         EE01FF02AA03BB04CC05DD07 /* RestaurantSearching.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantSearching.swift; sourceTree = "<group>"; };
         FF01AA02BB03CC04DD05EE07 /* SearchOrchestratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchOrchestratorTests.swift; sourceTree = "<group>"; };
+        C304D405E506F607A708B20A /* MockRestaurantSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockRestaurantSearchService.swift; sourceTree = "<group>"; };
+        D405E506F607A708B209C30C /* LocationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManagerTests.swift; sourceTree = "<group>"; };
         A102B203C304D405E506F608 /* StarRatingViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarRatingViewTests.swift; sourceTree = "<group>"; };
+        E506F607A708B209C304D40E /* MockLocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockLocationManager.swift; sourceTree = "<group>"; };
+        F607A708B209C304D405E510 /* RestaurantViewModelFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantViewModelFeatureTests.swift; sourceTree = "<group>"; };
         B203C304D405E506F607A709 /* RestaurantSearchServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantSearchServiceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -162,6 +170,10 @@
             children = (
                 E7A708CDA057727B09237CE5 /* Info.plist */,
                 83752E4E484BF69A1D293E4E /* RatingStoreTests.swift */,
+                C304D405E506F607A708B20A /* MockRestaurantSearchService.swift */,
+                E506F607A708B209C304D40E /* MockLocationManager.swift */,
+                F607A708B209C304D405E510 /* RestaurantViewModelFeatureTests.swift */,
+                D405E506F607A708B209C30C /* LocationManagerTests.swift */,
                 B203C304D405E506F607A709 /* RestaurantSearchServiceTests.swift */,
                 FF01AA02BB03CC04DD05EE07 /* SearchOrchestratorTests.swift */,
                 A102B203C304D405E506F608 /* StarRatingViewTests.swift */,
@@ -322,6 +334,10 @@
             buildActionMask = 2147483647;
             files = (
                 D757270055522FC04F829062 /* RatingStoreTests.swift in Sources */,
+                C304D405E506F607A708B209 /* MockRestaurantSearchService.swift in Sources */,
+                E506F607A708B209C304D40D /* MockLocationManager.swift in Sources */,
+                F607A708B209C304D405E50F /* RestaurantViewModelFeatureTests.swift in Sources */,
+                D405E506F607A708B209C30B /* LocationManagerTests.swift in Sources */,
                 B203C304D405E506F607A708 /* RestaurantSearchServiceTests.swift in Sources */,
                 FF01AA02BB03CC04DD05EE06 /* SearchOrchestratorTests.swift in Sources */,
                 A102B203C304D405E506F607 /* StarRatingViewTests.swift in Sources */,

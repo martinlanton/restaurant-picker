@@ -7,16 +7,20 @@ final class RatingStoreTests: XCTestCase {
     private var store: RatingStore!
     private var defaults: UserDefaults!
 
+    /// A unique suite name per test run to prevent cross-test UserDefaults pollution.
+    private var suiteName: String!
+
     override func setUp() {
         super.setUp()
-        // Use an ephemeral suite so tests don't pollute real UserDefaults.
-        defaults = UserDefaults(suiteName: "RatingStoreTests") ?? UserDefaults.standard
-        defaults.removePersistentDomain(forName: "RatingStoreTests")
+        // Use a UUID-keyed ephemeral suite so parallel test runs don't share state.
+        suiteName = UUID().uuidString
+        defaults = UserDefaults(suiteName: suiteName) ?? UserDefaults.standard
         store = RatingStore(defaults: defaults)
     }
 
     override func tearDown() {
-        defaults.removePersistentDomain(forName: "RatingStoreTests")
+        defaults.removePersistentDomain(forName: suiteName)
+        suiteName = nil
         defaults = nil
         store = nil
         super.tearDown()

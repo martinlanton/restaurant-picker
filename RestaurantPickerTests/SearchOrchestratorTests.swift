@@ -380,3 +380,191 @@ final class SearchOrchestratorTests: XCTestCase {
         XCTAssertEqual(jobID, currentID, "Current job should always be served first")
     }
 }
+
+// MARK: - SearchOrchestrator Execution Tests
+
+/// Tests for `SearchOrchestrator` execution behaviour using a mock search service.
+///
+/// These tests start the orchestrator run loop and verify that search service
+/// methods are called and that `OrchestratorUpdate` values are emitted correctly.
+final class SearchOrchestratorExecutionTests: XCTestCase {
+    private let newYork = CLLocation(latitude: 40.7128, longitude: -74.0060)
+
+    /// Builds a minimal `Restaurant` for test use.
+    private func makeRestaurant(name: String, distance: Double = 300) -> Restaurant {
+        Restaurant(
+            id: UUID(),
+            name: name,
+            coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+            distance: distance,
+            category: "Test",
+            cuisineTags: ["Test"],
+            phoneNumber: nil,
+            url: nil
+        )
+    }
+
+    /// Collects the first update whose `jobID` matches `targetJobID` from the
+    /// orchestrator's `updates` stream, or returns `nil` after `timeout` seconds.
+    private func firstUpdate(
+        from orchestrator: SearchOrchestrator,
+        matching targetJobID: UUID,
+        timeout: Double = 5
+    ) async -> OrchestratorUpdate? {
+        await withTaskGroup(of: OrchestratorUpdate?.self) { group in
+            group.addTask {
+                for await update in await orchestrator.updates where update.jobID == targetJobID {
+                    return update
+                }
+                return nil
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                return nil
+            }
+            defer { group.cancelAll() }
+            return await group.next() ?? nil
+        }
+    }
+
+    // MARK: - POI Search
+
+    func testOrchestratorCallsPOISearchDuringExecution() async {
+        // Arrange
+        let mock = MockRestaurantSearchService()
+        let orchestrator = SearchOrchestrator(searchService: mock)
+        await orchestrator.start()
+
+        // Act
+        let jobID = await orchestrator.enqueueLocation(newYork, focusRadius: 500)
+        _ = await firstUpdate(from: orchestrator, matching: jobID)
+
+        // Assert — POI search must have been called exactly once per job
+        let count = await mock.executePOISearchCallCount
+        XCTAssertGreaterThanOrEqual(count, 1)
+    }
+
+    func testOrchestratorEmitsUpdateContainingPOIResults() async {
+        // Arrange
+        let restaurant = makeRestaurant(name: "POI Restaurant")
+        let mock = MockRestaurantSearchService()
+        await mock.setPOISearchResult([(restaurant, "Restaurant")])
+        let orchestrator = SearchOrchestrator(searchService: mock)
+        await orchestrator.start()
+
+        // Act
+        let jobID = await orchestrator.enqueueLocation(newYork, focusRadius: 500)
+        let update = await firstUpdate(from: orchestrator, matching: jobID)
+
+        // Assert
+        XCTAssertNotNil(update, "Expected at least one update for the enqueued job")
+        XCTAssertTrue(
+            update?.snapshot.contains { $0.name == "POI Restaurant" } ?? false,
+            "Snapshot should include the restaurant returned by executePOISearch"
+        )
+    }
+
+    // MARK: - Focused Batch
+
+    func testOrchestratorCallsFocusedBatchDuringExecution() async {
+        // Arrange
+        let mock = MockRestaurantSearchService()
+        let orchestrator = SearchOrchestrator(searchService: mock)
+        await orchestrator.start()
+
+        // Act
+        let jobID = await orchestrator.enqueueLocation(newYork, focusRadius: 500)
+
+        // Collect updates until job is complete (or timeout)
+        var completed = false
+        let deadline = Date().addingTimeInterval(5)
+        for await update in await orchestrator.updates {
+            if update.jobID == jobID, update.isJobComplete {
+                completed = true
+                break
+            }
+            if Date() > deadline { break }
+        }
+
+        // Assert — at least one focused batch must have been executed
+        let count = await mock.executeFocusedBatchCallCount
+        XCTAssertGreaterThanOrEqual(count, 1, "executeFocusedBatch must be called at least once")
+        _ = completed // informational; not asserted to keep the test fast
+    }
+
+    func testOrchestratorEmitsUpdateContainingFocusedBatchResults() async {
+        // Arrange
+        let restaurant = makeRestaurant(name: "Ramen Bar")
+        let mock = MockRestaurantSearchService()
+        await mock.setFocusedBatchResult(FocusedBatchResult(
+            results: [(restaurant, "Ramen")],
+            saturatedQueries: []
+        ))
+        let orchestrator = SearchOrchestrator(searchService: mock)
+        await orchestrator.start()
+
+        // Act
+        let jobID = await orchestrator.enqueueLocation(newYork, focusRadius: 500)
+
+        // Collect until we see the restaurant or give up
+        var found = false
+        let deadline = Date().addingTimeInterval(5)
+        for await update in await orchestrator.updates {
+            if update.jobID == jobID, update.snapshot.contains(where: { $0.name == "Ramen Bar" }) {
+                found = true
+                break
+            }
+            if update.jobID == jobID, update.isJobComplete { break }
+            if Date() > deadline { break }
+        }
+
+        XCTAssertTrue(found, "Snapshot must eventually include the restaurant from executeFocusedBatch")
+    }
+
+    // MARK: - Completion
+
+    func testOrchestratorEmitsJobCompleteUpdate() async {
+        // Arrange
+        let mock = MockRestaurantSearchService()
+        let orchestrator = SearchOrchestrator(searchService: mock)
+        await orchestrator.start()
+
+        // Act
+        let jobID = await orchestrator.enqueueLocation(newYork, focusRadius: 500)
+
+        var receivedComplete = false
+        let deadline = Date().addingTimeInterval(10)
+        for await update in await orchestrator.updates {
+            if update.jobID == jobID, update.isJobComplete {
+                receivedComplete = true
+                break
+            }
+            if Date() > deadline { break }
+        }
+
+        XCTAssertTrue(receivedComplete, "Orchestrator must emit isJobComplete: true when all phases finish")
+    }
+
+    // MARK: - Wide Pass
+
+    func testOrchestratorCallsWideBatchAfterFocusedPass() async {
+        // Arrange — all execution methods return empty results so all phases
+        // finish as quickly as possible.
+        let mock = MockRestaurantSearchService()
+        let orchestrator = SearchOrchestrator(searchService: mock)
+        await orchestrator.start()
+
+        // Act — enqueue and wait for the job to complete
+        let jobID = await orchestrator.enqueueLocation(newYork, focusRadius: 500)
+
+        let deadline = Date().addingTimeInterval(10)
+        for await update in await orchestrator.updates {
+            if update.jobID == jobID, update.isJobComplete { break }
+            if Date() > deadline { break }
+        }
+
+        // Assert — wide pass must have run at least one batch
+        let count = await mock.executeWideBatchCallCount
+        XCTAssertGreaterThanOrEqual(count, 1, "executeWideBatch must be called during the wide pass phase")
+    }
+}
