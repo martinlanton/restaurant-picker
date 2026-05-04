@@ -593,8 +593,8 @@ final class RestaurantViewModelTests: XCTestCase {
         viewModel.filterRadius = nil
 
         // Rate all 5 stars so they all pass the filter
-        for r in sampleRestaurants {
-            ratingStore.setRating(5, for: r)
+        for restaurant in sampleRestaurants {
+            ratingStore.setRating(5, for: restaurant)
         }
         viewModel.minimumRating = 5
 
@@ -855,7 +855,7 @@ final class RestaurantViewModelTests: XCTestCase {
 
     private func makeTestDefaults() -> UserDefaults {
         let suite = "RestaurantViewModelTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
+        let defaults = UserDefaults(suiteName: suite) ?? UserDefaults.standard
         defaults.removePersistentDomain(forName: suite)
         return defaults
     }

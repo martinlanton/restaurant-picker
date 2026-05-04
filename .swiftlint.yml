@@ -1,6 +1,8 @@
 disabled_rules:
   - trailing_whitespace
   - todo
+  - trailing_comma
+  - opening_brace
 
 opt_in_rules:
   - empty_count
@@ -16,7 +18,20 @@ identifier_name:
     - x
     - y
 
+# File & body lengths: some source files are intentionally large due to static
+# cuisine-query data (RestaurantSearchService) and comprehensive test suites.
+file_length:
+  warning: 1300
+  error: 2000
+
+type_body_length:
+  warning: 650
+  error: 1000
+
+function_body_length:
+  warning: 60
+  error: 100
+
 excluded:
   - DerivedData
   - .build
-

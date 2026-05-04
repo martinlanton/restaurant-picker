@@ -54,7 +54,8 @@ struct ContentView: View {
                 if !viewModel.isLoading, viewModel.errorMessage == nil {
                     HStack {
                         Text(
-                            "\(viewModel.filteredRestaurants.count) restaurant\(viewModel.filteredRestaurants.count == 1 ? "" : "s")"
+                            "\(viewModel.filteredRestaurants.count) " +
+                                "restaurant\(viewModel.filteredRestaurants.count == 1 ? "" : "s")"
                         )
                         .font(.caption)
                         .foregroundColor(.secondary)

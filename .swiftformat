@@ -4,4 +4,4 @@
 --wrapcollections before-first
 --self remove
 --stripunusedargs closure-only
-
+--swiftversion 5.9

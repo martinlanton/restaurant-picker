@@ -308,9 +308,9 @@ final class RestaurantViewModel: ObservableObject {
     private func startOrchestratorLoop() {
         orchestratorTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.orchestrator.start()
-            for await update in self.orchestrator.updates {
-                self.handleOrchestratorUpdate(update)
+            await orchestrator.start()
+            for await update in orchestrator.updates {
+                handleOrchestratorUpdate(update)
             }
         }
     }
@@ -525,15 +525,14 @@ final class RestaurantViewModel: ObservableObject {
     private static func merged(_ existing: Restaurant, with other: Restaurant) -> Restaurant? {
         let mergedTags = existing.cuisineTags.union(other.cuisineTags)
 
-        let displayCategory: String? = if let newCat = other.category,
-                                          !RestaurantSearchService.genericCategories.contains(newCat),
-                                          RestaurantSearchService.genericCategories
-                                          .contains(existing.category ?? "")
-        {
-            newCat
-        } else {
-            existing.category
-        }
+        let newCatIsSpecific = other.category.map {
+            !RestaurantSearchService.genericCategories.contains($0)
+        } ?? false
+        let existingCatIsGeneric = RestaurantSearchService.genericCategories
+            .contains(existing.category ?? "")
+        let displayCategory: String? = (newCatIsSpecific && existingCatIsGeneric)
+            ? other.category
+            : existing.category
 
         guard mergedTags != existing.cuisineTags || displayCategory != existing.category else {
             return nil

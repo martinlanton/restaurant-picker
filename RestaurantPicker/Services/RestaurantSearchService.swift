@@ -325,8 +325,8 @@ actor RestaurantSearchService: RestaurantSearching {
     }
 
     /// Returns the diagonal direction between two orthogonally adjacent cardinals, if any.
-    private static func diagonal(between a: Cardinal, and b: Cardinal) -> Diagonal? {
-        switch (a, b) {
+    private static func diagonal(between lhs: Cardinal, and rhs: Cardinal) -> Diagonal? {
+        switch (lhs, rhs) {
         case (.north, .east), (.east, .north): .northEast
         case (.north, .west), (.west, .north): .northWest
         case (.south, .east), (.east, .south): .southEast
@@ -355,21 +355,28 @@ actor RestaurantSearchService: RestaurantSearching {
         location: CLLocation,
         networkRadius: Double
     ) async -> FocusedBatchResult {
-        let batchResults: [(query: String, label: String, result: SearchResult)] =
-            await withTaskGroup(of: (String, String, SearchResult).self) { group in
+        // Intermediate result per cuisine query, carrying its own metadata.
+        struct CuisineSearchResult {
+            let query: String
+            let label: String
+            let result: SearchResult
+        }
+
+        let batchResults: [CuisineSearchResult] =
+            await withTaskGroup(of: CuisineSearchResult.self) { group in
                 for cuisine in queries {
                     group.addTask { [self] in
-                        let r = await performSearch(
+                        let searchResult = await performSearch(
                             query: cuisine.query,
                             label: cuisine.label,
                             region: region,
                             location: location,
                             radius: networkRadius
                         )
-                        return (cuisine.query, cuisine.label, r)
+                        return CuisineSearchResult(query: cuisine.query, label: cuisine.label, result: searchResult)
                     }
                 }
-                var collected: [(String, String, SearchResult)] = []
+                var collected: [CuisineSearchResult] = []
                 for await item in group {
                     collected.append(item)
                 }
@@ -558,9 +565,9 @@ actor RestaurantSearchService: RestaurantSearching {
     ) -> [(diagonal: Diagonal, centre: CLLocationCoordinate2D)] {
         let list = Array(saturatedCardinals)
         var points: [(Diagonal, CLLocationCoordinate2D)] = []
-        for i in 0 ..< list.count {
-            for j in (i + 1) ..< list.count {
-                if let diag = diagonal(between: list[i], and: list[j]) {
+        for outerIdx in 0 ..< list.count {
+            for innerIdx in (outerIdx + 1) ..< list.count {
+                if let diag = diagonal(between: list[outerIdx], and: list[innerIdx]) {
                     let centre = offset(node.centre, diagonal: diag, metres: offsetDistance)
                     points.append((diag, centre))
                 }
@@ -591,8 +598,8 @@ actor RestaurantSearchService: RestaurantSearching {
                 }
             }
             var collected: [SearchResult] = []
-            for await r in group {
-                collected.append(r)
+            for await searchResult in group {
+                collected.append(searchResult)
             }
             return collected
         }
@@ -629,8 +636,8 @@ actor RestaurantSearchService: RestaurantSearching {
                 }
             }
             var results: [(Restaurant, String)] = []
-            for await r in group {
-                results.append(contentsOf: r.results)
+            for await searchResult in group {
+                results.append(contentsOf: searchResult.results)
             }
             return results
         }

@@ -132,10 +132,7 @@ struct CuisineFilterView: View {
             }
             // Sub-panel subview (index == regions.count), always present but
             // hidden when nothing is open so Layout always has the same child count.
-            if let name = openRegion,
-               let region = regions.first(where: { $0.name == name }),
-               hasPanel
-            {
+            if let name = openRegion, let region = regions.first(where: { $0.name == name }), hasPanel {
                 subCuisinePanel(for: region)
             } else {
                 Color.clear.frame(width: 0, height: 0)
@@ -195,10 +192,6 @@ struct CuisineFilterView: View {
 
     // MARK: - Sub-cuisine Panel
 
-    /// Renders the expanded sub-cuisine panel for a non-leaf region.
-    ///
-    /// Includes a "Select all / Deselect all" header and individual chips
-    /// for each leaf cuisine belonging to the region.
     /// Renders the expanded sub-cuisine panel for a non-leaf region.
     ///
     /// Includes a "Select all / Deselect all" header and individual chips
@@ -308,8 +301,8 @@ struct CuisineFilterView: View {
     ///   - activeSet: The currently selected (or excluded) set.
     /// - Returns: `.none`, `.some`, or `.all` depending on how many are active.
     private func triState(leaves: [String], activeSet: Set<String>) -> TriState {
-        let n = leaves.filter { activeSet.contains($0) }.count
-        return n == 0 ? .none : n == leaves.count ? .all : .some
+        let activeCount = leaves.filter { activeSet.contains($0) }.count
+        return activeCount == 0 ? .none : activeCount == leaves.count ? .all : .some
     }
 
     // MARK: - Helpers
@@ -326,8 +319,8 @@ struct CuisineFilterView: View {
         var out: [String] = []
         for group in region.groups {
             out.append(group.name)
-            for c in group.cuisines where c != group.name && !out.contains(c) {
-                out.append(c)
+            for cuisine in group.cuisines where cuisine != group.name && !out.contains(cuisine) {
+                out.append(cuisine)
             }
         }
         return out
@@ -349,21 +342,27 @@ struct CuisineFilterView: View {
     ///
     /// For example `"🇯🇵 Japanese"` → `"Japanese"`, `"Japanese"` → `"Japanese"`.
     private func bareLabel(_ name: String) -> String {
-        let p = name.components(separatedBy: " ")
-        return p.count > 1 ? p.dropFirst().joined(separator: " ") : name
+        let parts = name.components(separatedBy: " ")
+        return parts.count > 1 ? parts.dropFirst().joined(separator: " ") : name
     }
 
     /// Toggles a single cuisine between selected, excluded, and unset,
     /// respecting the current filter mode.
-    /// Toggles a single cuisine between selected, excluded, and unset,
-    /// respecting the current filter mode.
     private func toggle(cuisine: String) {
         if filterMode == .include {
-            if selectedCuisines.contains(cuisine) { selectedCuisines.remove(cuisine) }
-            else { excludedCuisines.remove(cuisine); selectedCuisines.insert(cuisine) }
+            if selectedCuisines.contains(cuisine) {
+                selectedCuisines.remove(cuisine)
+            } else {
+                excludedCuisines.remove(cuisine)
+                selectedCuisines.insert(cuisine)
+            }
         } else {
-            if excludedCuisines.contains(cuisine) { excludedCuisines.remove(cuisine) }
-            else { selectedCuisines.remove(cuisine); excludedCuisines.insert(cuisine) }
+            if excludedCuisines.contains(cuisine) {
+                excludedCuisines.remove(cuisine)
+            } else {
+                selectedCuisines.remove(cuisine)
+                excludedCuisines.insert(cuisine)
+            }
         }
     }
 
@@ -374,10 +373,19 @@ struct CuisineFilterView: View {
     private func toggleAll(leaves: [String], state: TriState) {
         for leaf in leaves {
             if state == .all {
-                if filterMode == .include { selectedCuisines.remove(leaf) } else { excludedCuisines.remove(leaf) }
+                if filterMode == .include {
+                    selectedCuisines.remove(leaf)
+                } else {
+                    excludedCuisines.remove(leaf)
+                }
             } else {
-                if filterMode == .include { excludedCuisines.remove(leaf); selectedCuisines.insert(leaf) }
-                else { selectedCuisines.remove(leaf); excludedCuisines.insert(leaf) }
+                if filterMode == .include {
+                    excludedCuisines.remove(leaf)
+                    selectedCuisines.insert(leaf)
+                } else {
+                    selectedCuisines.remove(leaf)
+                    excludedCuisines.insert(leaf)
+                }
             }
         }
     }
@@ -401,9 +409,9 @@ private struct RowInjectingLayout: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
         let result = layout(proposal: proposal, subviews: subviews)
-        for (i, origin) in result.origins.enumerated() {
-            let size = result.sizes[i]
-            subviews[i].place(
+        for (index, origin) in result.origins.enumerated() {
+            let size = result.sizes[index]
+            subviews[index].place(
                 at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
                 proposal: ProposedViewSize(size)
             )
@@ -431,14 +439,14 @@ private struct RowInjectingLayout: Layout {
         var currentRow: [Int] = []
         var currentX: CGFloat = 0
 
-        for (i, size) in chipSizes.enumerated() {
+        for (chipIdx, size) in chipSizes.enumerated() {
             let needed = currentRow.isEmpty ? size.width : size.width + spacing
             if currentX + needed > maxW, !currentRow.isEmpty {
                 rows.append(currentRow)
-                currentRow = [i]
+                currentRow = [chipIdx]
                 currentX = size.width
             } else {
-                currentRow.append(i)
+                currentRow.append(chipIdx)
                 currentX += needed
             }
         }
@@ -505,23 +513,23 @@ struct FlowLayout: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
         let result = arrange(proposal: proposal, subviews: subviews)
-        for (i, pos) in result.positions.enumerated() {
-            subviews[i].place(at: CGPoint(x: bounds.minX + pos.x, y: bounds.minY + pos.y), proposal: .unspecified)
+        for (index, pos) in result.positions.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + pos.x, y: bounds.minY + pos.y), proposal: .unspecified)
         }
     }
 
     private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (positions: [CGPoint], size: CGSize) {
         let maxW = proposal.width ?? .infinity
         var positions: [CGPoint] = []
-        var x: CGFloat = 0, y: CGFloat = 0, lineH: CGFloat = 0
+        var xOffset: CGFloat = 0, yOffset: CGFloat = 0, lineH: CGFloat = 0
         for sub in subviews {
-            let s = sub.sizeThatFits(.unspecified)
-            if x + s.width > maxW, x > 0 { x = 0; y += lineH + spacing; lineH = 0 }
-            positions.append(CGPoint(x: x, y: y))
-            lineH = max(lineH, s.height)
-            x += s.width + spacing
+            let subSize = sub.sizeThatFits(.unspecified)
+            if xOffset + subSize.width > maxW, xOffset > 0 { xOffset = 0; yOffset += lineH + spacing; lineH = 0 }
+            positions.append(CGPoint(x: xOffset, y: yOffset))
+            lineH = max(lineH, subSize.height)
+            xOffset += subSize.width + spacing
         }
-        return (positions, CGSize(width: maxW, height: y + lineH))
+        return (positions, CGSize(width: maxW, height: yOffset + lineH))
     }
 }
 

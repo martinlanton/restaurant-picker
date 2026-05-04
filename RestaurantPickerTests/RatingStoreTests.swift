@@ -10,7 +10,7 @@ final class RatingStoreTests: XCTestCase {
     override func setUp() {
         super.setUp()
         // Use an ephemeral suite so tests don't pollute real UserDefaults.
-        defaults = UserDefaults(suiteName: "RatingStoreTests")!
+        defaults = UserDefaults(suiteName: "RatingStoreTests") ?? UserDefaults.standard
         defaults.removePersistentDomain(forName: "RatingStoreTests")
         store = RatingStore(defaults: defaults)
     }
