@@ -765,3 +765,261 @@ final class ClearSelectionTests: XCTestCase {
         XCTAssertNil(vm.selectedRestaurant)
     }
 }
+
+// MARK: - Rejected Restaurant Pick Pool Tests
+
+/// Tests that rejected restaurants (rating == 0) are excluded from `pickEligibleRestaurants`
+/// but remain visible in `filteredRestaurants` — keeping the "Pick a Restaurant!" button
+/// greyed out when every restaurant has been rejected, while still showing them in the list.
+@MainActor
+final class RejectedRestaurantPickPoolTests: XCTestCase {
+    private let sampleRestaurants = [
+        Restaurant(
+            id: UUID(), name: "Thai Place",
+            coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+            distance: 300, category: "Thai", cuisineTags: ["Thai"], phoneNumber: nil, url: nil
+        ),
+        Restaurant(
+            id: UUID(), name: "Pizza Shop",
+            coordinate: .init(latitude: 40.7200, longitude: -74.0100),
+            distance: 500, category: "Italian", cuisineTags: ["Italian"], phoneNumber: nil, url: nil
+        ),
+        Restaurant(
+            id: UUID(), name: "Sushi Bar",
+            coordinate: .init(latitude: 40.7300, longitude: -74.0200),
+            distance: 700, category: "Japanese", cuisineTags: ["Japanese"], phoneNumber: nil, url: nil
+        ),
+    ]
+
+    private func makeTestDefaults() -> UserDefaults {
+        let suite = "RejectedRestaurantPickPoolTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite) ?? UserDefaults.standard
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
+    }
+
+    func testAllRejectedEmptiesPickPool() {
+        // Arrange
+        let ratingStore = RatingStore(defaults: makeTestDefaults())
+        let vm = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
+
+        for restaurant in sampleRestaurants {
+            ratingStore.setRating(0, for: restaurant)
+        }
+
+        // Act — trigger applyFilter with no rating filter active
+        vm.filterRadius = nil
+
+        // Assert — pick pool empty so button greys out
+        XCTAssertTrue(vm.pickEligibleRestaurants.isEmpty, "All-rejected list must produce an empty pick pool")
+    }
+
+    func testAllRejectedRestaurantsStillVisibleInDisplayList() {
+        // Rejected restaurants must remain in filteredRestaurants so users can
+        // review and change their ratings.
+        let ratingStore = RatingStore(defaults: makeTestDefaults())
+        let vm = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
+
+        for restaurant in sampleRestaurants {
+            ratingStore.setRating(0, for: restaurant)
+        }
+
+        vm.filterRadius = nil
+
+        XCTAssertEqual(
+            vm.filteredRestaurants.count, sampleRestaurants.count,
+            "Rejected restaurants must still appear in the display list"
+        )
+    }
+
+    func testMixedRejectedAndRatedExcludesRejectedFromPickPool() {
+        // Arrange — one rejected, one rated, one unrated
+        let ratingStore = RatingStore(defaults: makeTestDefaults())
+        let vm = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
+
+        ratingStore.setRating(0, for: sampleRestaurants[0]) // Thai — rejected
+        ratingStore.setRating(4, for: sampleRestaurants[1]) // Pizza — 4 stars
+        // Sushi — unrated (nil)
+
+        vm.filterRadius = nil
+
+        // Assert pick pool: Pizza + Sushi, not Thai
+        XCTAssertEqual(vm.pickEligibleRestaurants.count, 2)
+        let pickNames = Set(vm.pickEligibleRestaurants.map(\.name))
+        XCTAssertFalse(pickNames.contains("Thai Place"), "Rejected restaurant must not be in pick pool")
+        XCTAssertTrue(pickNames.contains("Pizza Shop"))
+        XCTAssertTrue(pickNames.contains("Sushi Bar"))
+
+        // Assert display list: all three visible
+        XCTAssertEqual(vm.filteredRestaurants.count, 3)
+    }
+
+    func testRejectedRestaurantExcludedFromPickPoolPreventsPick() {
+        // When only one restaurant exists and it is rejected, selectRandomRestaurant
+        // must set an error and not show the selection sheet.
+        let ratingStore = RatingStore(defaults: makeTestDefaults())
+        let vm = RestaurantViewModel(restaurants: [sampleRestaurants[0]], ratingStore: ratingStore)
+        ratingStore.setRating(0, for: sampleRestaurants[0])
+        vm.filterRadius = nil
+
+        vm.selectRandomRestaurant()
+
+        XCTAssertNil(vm.selectedRestaurant)
+        XCTAssertFalse(vm.showSelectedRestaurant, "Sheet must not open when pick pool is empty")
+        XCTAssertNotNil(vm.errorMessage)
+    }
+
+    func testExplicitRatingFilterStillExcludesRejectedNormally() {
+        // When minimumRating is set, passesRatingFilter already excludes rejected.
+        // Verify the two exclusion paths don't conflict.
+        let ratingStore = RatingStore(defaults: makeTestDefaults())
+        let vm = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
+
+        ratingStore.setRating(0, for: sampleRestaurants[0]) // rejected
+        ratingStore.setRating(4, for: sampleRestaurants[1])
+        ratingStore.setRating(3, for: sampleRestaurants[2])
+
+        vm.filterRadius = nil
+        vm.minimumRating = 3
+
+        // Rating filter path: rejected fails passesRatingFilter (0 < 3), so it's
+        // excluded from baseFiltered and therefore from both lists.
+        XCTAssertFalse(vm.filteredRestaurants.contains { $0.name == "Thai Place" })
+        XCTAssertFalse(vm.pickEligibleRestaurants.contains { $0.name == "Thai Place" })
+        XCTAssertEqual(vm.pickEligibleRestaurants.count, 2)
+    }
+}
+
+// MARK: - Location Resolution Tests
+
+/// Tests that `fetchNearbyRestaurants()` sets the correct user-visible error messages
+/// for each location failure mode, and that `isLoading` always returns to `false`.
+@MainActor
+final class LocationResolutionTests: XCTestCase {
+    func testDeniedLocationSetsDeniedErrorMessage() async {
+        // Arrange
+        let locationManager = MockLocationManager()
+        locationManager.authorizationStatus = .denied
+        let vm = RestaurantViewModel(
+            locationManager: locationManager,
+            searchService: MockRestaurantSearchService()
+        )
+
+        // Act — awaiting the call lets the function's internal guard run synchronously
+        await vm.fetchNearbyRestaurants()
+
+        // Assert
+        XCTAssertEqual(
+            vm.errorMessage,
+            "Location access denied. Please enable location services in Settings."
+        )
+        XCTAssertFalse(vm.isLoading, "isLoading must be false after a failed fetch")
+    }
+
+    func testNotDeterminedLocationSetsNotAuthorizedMessage() async {
+        // Arrange — mock never changes status after requestAuthorization(), so after
+        // the 500 ms authorization wait the status is still notDetermined.
+        let locationManager = MockLocationManager()
+        locationManager.authorizationStatus = .notDetermined
+        let vm = RestaurantViewModel(
+            locationManager: locationManager,
+            searchService: MockRestaurantSearchService()
+        )
+
+        // Act — waits ~500 ms internally for authorization to arrive
+        await vm.fetchNearbyRestaurants()
+
+        // Assert
+        XCTAssertEqual(vm.errorMessage, "Location access not yet authorized.")
+        XCTAssertFalse(vm.isLoading, "isLoading must be false after a failed fetch")
+    }
+
+    func testAuthorizedButNoGPSFixSetsUnableToLocateMessage() async {
+        // Arrange — authorized but currentLocation stays nil (mock never calls back)
+        let locationManager = MockLocationManager()
+        locationManager.authorizationStatus = .authorizedWhenInUse
+        locationManager.currentLocation = nil
+        let vm = RestaurantViewModel(
+            locationManager: locationManager,
+            searchService: MockRestaurantSearchService()
+        )
+
+        // Act — waits ~2 s internally for a GPS fix
+        await vm.fetchNearbyRestaurants()
+
+        // Assert
+        XCTAssertEqual(vm.errorMessage, "Unable to determine your location.")
+        XCTAssertFalse(vm.isLoading, "isLoading must be false after a failed fetch")
+    }
+}
+
+// MARK: - Cache Hit Loading State Tests
+
+/// Tests that a cache hit in `fetchNearbyRestaurants()` immediately clears both
+/// loading indicators without enqueueing a new search job.
+@MainActor
+final class CacheHitLoadingStateTests: XCTestCase {
+    private let newYork = CLLocation(latitude: 40.7128, longitude: -74.0060)
+
+    private func makeRestaurant(name: String) -> Restaurant {
+        Restaurant(
+            id: UUID(), name: name,
+            coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+            distance: 300, category: "Test", cuisineTags: ["Test"], phoneNumber: nil, url: nil
+        )
+    }
+
+    func testCacheHitSetsLoadingStatesToFalseImmediately() async {
+        // Arrange — seed the cache by completing a job.
+        let locationManager = MockLocationManager()
+        locationManager.currentLocation = newYork
+        let vm = RestaurantViewModel(
+            locationManager: locationManager,
+            searchService: MockRestaurantSearchService()
+        )
+        let jobID = UUID()
+        vm.currentSearchJobID = jobID
+        vm.isLoading = true
+        vm.handleOrchestratorUpdate(OrchestratorUpdate(
+            jobID: jobID,
+            location: newYork,
+            snapshot: [makeRestaurant(name: "Thai Place")],
+            isJobComplete: true
+        ))
+        XCTAssertEqual(vm.restaurants.count, 1, "Pre-condition: cache must be seeded")
+
+        // Act — second fetch for the same location should hit the cache.
+        await vm.fetchNearbyRestaurants()
+
+        // Assert — no spinner: cache hit path clears both flags immediately.
+        XCTAssertFalse(vm.isLoading, "isLoading must be false on a cache hit")
+        XCTAssertFalse(vm.isLoadingMore, "isLoadingMore must be false on a cache hit")
+        XCTAssertEqual(vm.restaurants.count, 1, "Cached restaurants must be preserved")
+    }
+
+    func testCacheHitPreservesJobIDUnchanged() async {
+        // A cache hit must not enqueue a new orchestrator job — the jobID stays the same.
+        let locationManager = MockLocationManager()
+        locationManager.currentLocation = newYork
+        let vm = RestaurantViewModel(
+            locationManager: locationManager,
+            searchService: MockRestaurantSearchService()
+        )
+        let jobID = UUID()
+        vm.currentSearchJobID = jobID
+        vm.isLoading = true
+        vm.handleOrchestratorUpdate(OrchestratorUpdate(
+            jobID: jobID,
+            location: newYork,
+            snapshot: [makeRestaurant(name: "Thai Place")],
+            isJobComplete: true
+        ))
+
+        await vm.fetchNearbyRestaurants()
+
+        XCTAssertEqual(
+            vm.currentSearchJobID, jobID,
+            "Cache hit must not replace the current search job ID"
+        )
+    }
+}

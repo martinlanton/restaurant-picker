@@ -39,6 +39,54 @@ final class RestaurantViewModelTests: XCTestCase {
         ),
     ]
 
+    // MARK: - Default State Tests
+
+    @MainActor
+    func testDefaultFilterRadiusIs500m() {
+        // The ViewModel must start with a 500 m radius so nearby searches are the
+        // default experience without the user having to configure anything.
+        let vm = RestaurantViewModel(
+            locationManager: MockLocationManager(),
+            searchService: MockRestaurantSearchService()
+        )
+        XCTAssertEqual(vm.filterRadius, 500)
+    }
+
+    @MainActor
+    func testDefaultFilterRadiusAppliedToIncomingResults() {
+        // Restaurants beyond 500 m must be filtered out of the display list when
+        // the ViewModel is freshly initialised (no explicit filterRadius set).
+        let locationManager = MockLocationManager()
+        locationManager.currentLocation = CLLocation(latitude: 40.7128, longitude: -74.0060)
+        let vm = RestaurantViewModel(
+            locationManager: locationManager,
+            searchService: MockRestaurantSearchService()
+        )
+
+        let nearRestaurant = Restaurant(
+            id: UUID(), name: "Near Place",
+            coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+            distance: 400, category: nil, cuisineTags: [], phoneNumber: nil, url: nil
+        )
+        let farRestaurant = Restaurant(
+            id: UUID(), name: "Far Place",
+            coordinate: .init(latitude: 40.7200, longitude: -74.0100),
+            distance: 600, category: nil, cuisineTags: [], phoneNumber: nil, url: nil
+        )
+
+        let jobID = UUID()
+        vm.currentSearchJobID = jobID
+        vm.handleOrchestratorUpdate(OrchestratorUpdate(
+            jobID: jobID,
+            location: CLLocation(latitude: 40.7128, longitude: -74.0060),
+            snapshot: [nearRestaurant, farRestaurant],
+            isJobComplete: false
+        ))
+
+        XCTAssertEqual(vm.filteredRestaurants.count, 1)
+        XCTAssertEqual(vm.filteredRestaurants.first?.name, "Near Place")
+    }
+
     // MARK: - Filter Tests
 
     @MainActor
@@ -244,6 +292,123 @@ final class RestaurantViewModelTests: XCTestCase {
         // Assert — only Thai Place (500m) passes both filters
         XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
         XCTAssertEqual(viewModel.filteredRestaurants.first?.name, "Thai Place")
+    }
+
+    // MARK: - Multi-Tag Cuisine Filter Tests
+
+    @MainActor
+    func testIncludeFilterMatchesFirstOfMultipleTags() {
+        // A restaurant tagged ["Thai", "Japanese"] appears when include filter selects "Thai"
+        let fusionRestaurant = Restaurant(
+            id: UUID(),
+            name: "Thai-Japanese Fusion",
+            coordinate: .init(latitude: 40.7400, longitude: -74.0300),
+            distance: 600,
+            category: "Thai",
+            cuisineTags: ["Thai", "Japanese"],
+            phoneNumber: nil,
+            url: nil
+        )
+        let viewModel = RestaurantViewModel(restaurants: [fusionRestaurant])
+        viewModel.filterRadius = nil
+        viewModel.selectedCuisines = ["Thai"]
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+    }
+
+    @MainActor
+    func testIncludeFilterMatchesSecondOfMultipleTags() {
+        // A restaurant tagged ["Thai", "Japanese"] appears when include filter selects "Japanese"
+        let fusionRestaurant = Restaurant(
+            id: UUID(),
+            name: "Thai-Japanese Fusion",
+            coordinate: .init(latitude: 40.7400, longitude: -74.0300),
+            distance: 600,
+            category: "Thai",
+            cuisineTags: ["Thai", "Japanese"],
+            phoneNumber: nil,
+            url: nil
+        )
+        let viewModel = RestaurantViewModel(restaurants: [fusionRestaurant])
+        viewModel.filterRadius = nil
+        viewModel.selectedCuisines = ["Japanese"]
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+    }
+
+    @MainActor
+    func testIncludeFilterHidesRestaurantWhenNoTagMatches() {
+        // A restaurant tagged ["Thai", "Japanese"] is hidden when include filter selects an unrelated cuisine
+        let fusionRestaurant = Restaurant(
+            id: UUID(),
+            name: "Thai-Japanese Fusion",
+            coordinate: .init(latitude: 40.7400, longitude: -74.0300),
+            distance: 600,
+            category: "Thai",
+            cuisineTags: ["Thai", "Japanese"],
+            phoneNumber: nil,
+            url: nil
+        )
+        let viewModel = RestaurantViewModel(restaurants: [fusionRestaurant])
+        viewModel.filterRadius = nil
+        viewModel.selectedCuisines = ["Italian"]
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 0)
+    }
+
+    @MainActor
+    func testExcludeFilterHidesRestaurantWhenOneTagMatches() {
+        // A restaurant tagged ["Thai", "Japanese"] is excluded when one of its tags is in the exclude list
+        let fusionRestaurant = Restaurant(
+            id: UUID(),
+            name: "Thai-Japanese Fusion",
+            coordinate: .init(latitude: 40.7400, longitude: -74.0300),
+            distance: 600,
+            category: "Thai",
+            cuisineTags: ["Thai", "Japanese"],
+            phoneNumber: nil,
+            url: nil
+        )
+        let viewModel = RestaurantViewModel(restaurants: [fusionRestaurant])
+        viewModel.filterRadius = nil
+        viewModel.excludedCuisines = ["Japanese"]
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 0)
+    }
+
+    @MainActor
+    func testExcludeFilterKeepsRestaurantWhenNoTagMatches() {
+        // A restaurant tagged ["Thai", "Japanese"] remains visible when the exclude filter targets a different cuisine
+        let fusionRestaurant = Restaurant(
+            id: UUID(),
+            name: "Thai-Japanese Fusion",
+            coordinate: .init(latitude: 40.7400, longitude: -74.0300),
+            distance: 600,
+            category: "Thai",
+            cuisineTags: ["Thai", "Japanese"],
+            phoneNumber: nil,
+            url: nil
+        )
+        let viewModel = RestaurantViewModel(restaurants: [fusionRestaurant])
+        viewModel.filterRadius = nil
+        viewModel.excludedCuisines = ["Italian"]
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+    }
+
+    @MainActor
+    func testExcludeWinsWhenIncludeAndExcludeEachMatchDifferentTag() {
+        // A restaurant tagged ["Thai", "Japanese"] is excluded when include matches "Thai" but exclude matches "Japanese"
+        let fusionRestaurant = Restaurant(
+            id: UUID(),
+            name: "Thai-Japanese Fusion",
+            coordinate: .init(latitude: 40.7400, longitude: -74.0300),
+            distance: 600,
+            category: "Thai",
+            cuisineTags: ["Thai", "Japanese"],
+            phoneNumber: nil,
+            url: nil
+        )
+        let viewModel = RestaurantViewModel(restaurants: [fusionRestaurant])
+        viewModel.filterRadius = nil
+        viewModel.selectedCuisines = ["Thai"]
+        viewModel.excludedCuisines = ["Japanese"]
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 0)
     }
 
     @MainActor
@@ -532,6 +697,48 @@ final class RestaurantViewModelTests: XCTestCase {
 
         // Assert — 1 cuisine include + 1 rating filter = 2
         XCTAssertEqual(viewModel.activeCuisineFilterCount, 2)
+    }
+
+    @MainActor
+    func testRatingAndCuisineIncludeFilterCombine() {
+        // Arrange — Thai Place rated 2, others rated higher; include Thai only
+        let ratingStore = RatingStore(defaults: makeTestDefaults())
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
+        viewModel.filterRadius = nil
+
+        ratingStore.setRating(2, for: sampleRestaurants[0]) // Thai = 2 stars
+        ratingStore.setRating(4, for: sampleRestaurants[1]) // Italian = 4 stars
+        ratingStore.setRating(5, for: sampleRestaurants[2]) // Japanese = 5 stars
+
+        // Act — only Thai included, but Thai's rating (2) is below the minimum (3)
+        viewModel.selectedCuisines = ["Thai"]
+        viewModel.minimumRating = 3
+
+        // Assert — nothing passes both filters
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 0)
+    }
+
+    @MainActor
+    func testRatingAndCuisineExcludeFilterCombine() {
+        // Arrange — all rated 4 stars; exclude Italian
+        let ratingStore = RatingStore(defaults: makeTestDefaults())
+        let viewModel = RestaurantViewModel(restaurants: sampleRestaurants, ratingStore: ratingStore)
+        viewModel.filterRadius = nil
+
+        ratingStore.setRating(4, for: sampleRestaurants[0]) // Thai = 4 stars
+        ratingStore.setRating(4, for: sampleRestaurants[1]) // Italian = 4 stars
+        ratingStore.setRating(4, for: sampleRestaurants[2]) // Japanese = 4 stars
+
+        // Act
+        viewModel.excludedCuisines = ["Italian"]
+        viewModel.minimumRating = 3
+
+        // Assert — Italian excluded even though it meets the rating requirement
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 2)
+        let names = Set(viewModel.filteredRestaurants.map(\.name))
+        XCTAssertFalse(names.contains("Pizza Shop"))
+        XCTAssertTrue(names.contains("Thai Place"))
+        XCTAssertTrue(names.contains("Sushi Bar"))
     }
 
     // MARK: - Weighted Selection Tests
@@ -849,6 +1056,56 @@ final class RestaurantViewModelTests: XCTestCase {
         // Assert — should still match
         XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
         XCTAssertTrue(viewModel.filteredRestaurants.first?.name.contains("Tad") ?? false)
+    }
+
+    @MainActor
+    func testSearchTextMatchesCurlyDoubleQuoteAgainstStraightQuoteName() {
+        // Arrange — restaurant name uses straight double quotes
+        let restaurants = [
+            Restaurant(
+                id: UUID(),
+                name: "\"The Best\" Cafe",
+                coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+                distance: 500,
+                category: "American",
+                phoneNumber: nil,
+                url: nil
+            ),
+            sampleRestaurants[1],
+        ]
+        let viewModel = RestaurantViewModel(restaurants: restaurants)
+        viewModel.filterRadius = nil
+
+        // Act — iOS keyboard may produce left/right curly double quotes (U+201C / U+201D)
+        viewModel.searchText = "\u{201C}The Best\u{201D}"
+
+        // Assert — normalisation converts curly quotes → straight so it matches
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
+    }
+
+    @MainActor
+    func testSearchTextMatchesStraightDoubleQuoteAgainstCurlyQuoteName() {
+        // Arrange — restaurant name uses curly double quotes
+        let restaurants = [
+            Restaurant(
+                id: UUID(),
+                name: "\u{201C}The Best\u{201D} Cafe",
+                coordinate: .init(latitude: 40.7128, longitude: -74.0060),
+                distance: 500,
+                category: "American",
+                phoneNumber: nil,
+                url: nil
+            ),
+            sampleRestaurants[1],
+        ]
+        let viewModel = RestaurantViewModel(restaurants: restaurants)
+        viewModel.filterRadius = nil
+
+        // Act — user types with a straight double quote
+        viewModel.searchText = "\"The Best\""
+
+        // Assert
+        XCTAssertEqual(viewModel.filteredRestaurants.count, 1)
     }
 
     // MARK: - Test Helpers
@@ -1187,6 +1444,22 @@ final class RestaurantTests: XCTestCase {
 
         // Assert
         XCTAssertEqual(restaurant.formattedDistance, "2.5 km")
+    }
+
+    func testFormattedDistanceAtExactlyOneKilometer() {
+        // The boundary condition: distance < 1000 shows metres, so exactly 1000 m
+        // must display as kilometres.
+        let restaurant = Restaurant(
+            id: UUID(),
+            name: "Test",
+            coordinate: .init(latitude: 0, longitude: 0),
+            distance: 1000,
+            category: nil,
+            phoneNumber: nil,
+            url: nil
+        )
+
+        XCTAssertEqual(restaurant.formattedDistance, "1.0 km")
     }
 
     func testRestaurantEquality() {

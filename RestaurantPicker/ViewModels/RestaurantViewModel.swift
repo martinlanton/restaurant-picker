@@ -589,15 +589,25 @@ final class RestaurantViewModel: ObservableObject {
     }
 
     /// Applies the distance, cuisine, rating, and text filters to the restaurants list.
+    ///
+    /// `filteredRestaurants` and `pickEligibleRestaurants` are computed from the same
+    /// base set but differ on one point: rejected restaurants (rating == 0) are always
+    /// excluded from the pick pool when no explicit rating filter is active, so the
+    /// "Pick a Restaurant!" button greys out if every restaurant has been rejected.
+    /// Rejected restaurants remain visible in the display list (showing the red ⊘ icon)
+    /// so users can review and change their ratings.
     private func applyFilter() {
         let searchQuery = normalizedSearchQuery()
-        pickEligibleRestaurants = restaurants.filter { restaurant in
+        let baseFiltered = restaurants.filter { restaurant in
             passesDistanceFilter(restaurant)
                 && passesCuisineIncludeFilter(restaurant)
                 && passesCuisineExcludeFilter(restaurant)
                 && passesRatingFilter(restaurant)
         }
-        filteredRestaurants = pickEligibleRestaurants.filter { restaurant in
+        pickEligibleRestaurants = baseFiltered.filter { restaurant in
+            minimumRating != nil || ratingStore.rating(for: restaurant) != 0
+        }
+        filteredRestaurants = baseFiltered.filter { restaurant in
             passesSearchFilter(restaurant, query: searchQuery)
         }
     }
